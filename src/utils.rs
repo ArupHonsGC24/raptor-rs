@@ -29,3 +29,10 @@ pub fn parse_time(s: &str) -> Result<u32, gtfs_structures::Error> {
         parse_time_impl(hour, min, sec).map_err(|_| gtfs_structures::Error::InvalidTime(s.to_owned()))
     }
 }
+
+pub fn get_time_str(time: u32) -> String {
+    let hours = time / 3600;
+    let minutes = (time % 3600) / 60;
+    let seconds = time % 60;
+    format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+}
