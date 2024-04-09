@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteTargetsManager">
+    <targets>
+      <target name="WSL - Ubuntu" type="wsl" uuid="77709e8a-bda8-49be-8be8-50a717000ccb">
+        <config>
+          <option name="distributionMsId" value="Ubuntu" />
+          <option name="projectRootOnTarget" value="{exitCode=0, timeout=false, cancelled=false, stdout=/mnt/c/Users/Ben/AppData/Local/Programs/RustRover/jbr/bin&#10;, stderr=}/raptor-rs" />
+        </config>
+        <ContributedStateBase type="RsLanguageRuntime">
+          <config>
+            <option name="cargoPath" value="/home/ben/.cargo/bin/cargo" />
+            <option name="cargoVersion" value="1.77.1 (e52e36006 2024-03-26)" />
+            <option name="rustcPath" value="/home/ben/.cargo/bin/rustc" />
+            <option name="rustcVersion" value="1.77.1 (7cf61ebde 2024-03-27)" />
+          </config>
+        </ContributedStateBase>
+      </target>
+    </targets>
+  </component>
+</project>
