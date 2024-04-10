@@ -12,6 +12,15 @@ impl<T> OptionExt<T> for Option<T> {
     }
 }
 
+// A fast way to check a buffer is all zeros (https://stackoverflow.com/questions/65367552/how-to-efficiently-check-a-vecu8-to-see-if-its-all-zeros).
+pub fn is_zero(buf: &[bool]) -> bool {
+    let (prefix, aligned, suffix) = unsafe { buf.align_to::<u128>() };
+
+    prefix.iter().all(|&x| x == false)
+        && aligned.iter().all(|&x| x == 0)
+        && suffix.iter().all(|&x| x == false)
+}
+
 pub fn get_short_stop_name(stop: &str) -> &str {
     // Convert "Laburnum Railway Station (Blackburn)" to "Laburnum", and "Noble Park Railway Station (Noble Park)" to "Noble Park", etc.
     stop.split(" Railway Station").next().unwrap()

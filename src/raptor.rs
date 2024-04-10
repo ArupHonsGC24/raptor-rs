@@ -351,9 +351,7 @@ impl<'a> Raptor<'a> {
 
             // TODO: Footpaths between stops
 
-            // TODO: Check if this is slow and if it can be optimised.
-            // (https://stackoverflow.com/questions/65367552/how-to-efficiently-check-a-vecu8-to-see-if-its-all-zeros)
-            if !marked_stops.iter().any(|&b| b) {
+            if utils::is_zero(&marked_stops) {
                 break;
             }
         }
