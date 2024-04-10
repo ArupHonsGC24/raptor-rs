@@ -1,4 +1,6 @@
-use crate::Timestamp;
+use chrono::NaiveDate;
+use gtfs_structures::{Gtfs, Trip};
+use crate::raptor::Timestamp;
 
 pub(crate) trait OptionExt<T> {
     fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool;
@@ -10,9 +12,18 @@ impl<T> OptionExt<T> for Option<T> {
     }
 }
 
+pub fn get_short_stop_name(stop: &str) -> &str {
+    // Convert "Laburnum Railway Station (Blackburn)" to "Laburnum", and "Noble Park Railway Station (Noble Park)" to "Noble Park", etc.
+    stop.split(" Railway Station").next().unwrap()
+}
+
+pub(crate) fn does_trip_run(gtfs: &Gtfs, trip: &Trip, date: NaiveDate) -> bool {
+    let calender = &gtfs.calendar[trip.service_id.as_str()];
+    calender.valid_weekday(date) && calender.start_date <= date && date <= calender.end_date
+}
+
 // Copied from gtfs_structures::serde_helpers, which are private :(
-// TODO: Make const for fun?
-pub fn parse_time_impl(h: &str, m: &str, s: &str) -> Result<Timestamp, std::num::ParseIntError> {
+fn parse_time_impl(h: &str, m: &str, s: &str) -> Result<Timestamp, std::num::ParseIntError> {
     let hours: u32 = h.parse()?;
     let minutes: u32 = m.parse()?;
     let seconds: u32 = s.parse()?;
