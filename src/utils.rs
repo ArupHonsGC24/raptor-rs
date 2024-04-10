@@ -1,14 +1,25 @@
+use crate::Timestamp;
+
+pub(crate) trait OptionExt<T> {
+    fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool;
+}
+
+impl<T> OptionExt<T> for Option<T> {
+    fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool {
+        self.map(f).unwrap_or(true)
+    }
+}
 
 // Copied from gtfs_structures::serde_helpers, which are private :(
 // TODO: Make const for fun?
-pub fn parse_time_impl(h: &str, m: &str, s: &str) -> Result<u32, std::num::ParseIntError> {
+pub fn parse_time_impl(h: &str, m: &str, s: &str) -> Result<Timestamp, std::num::ParseIntError> {
     let hours: u32 = h.parse()?;
     let minutes: u32 = m.parse()?;
     let seconds: u32 = s.parse()?;
     Ok(hours * 3600 + minutes * 60 + seconds)
 }
 
-pub fn parse_time(s: &str) -> Result<u32, gtfs_structures::Error> {
+pub fn parse_time(s: &str) -> Result<Timestamp, gtfs_structures::Error> {
     if s.len() < 7 {
         Err(gtfs_structures::Error::InvalidTime(s.to_owned()))
     } else {
@@ -30,7 +41,7 @@ pub fn parse_time(s: &str) -> Result<u32, gtfs_structures::Error> {
     }
 }
 
-pub fn get_time_str(time: u32) -> String {
+pub fn get_time_str(time: Timestamp) -> String {
     let hours = time / 3600;
     let minutes = (time % 3600) / 60;
     let seconds = time % 60;
