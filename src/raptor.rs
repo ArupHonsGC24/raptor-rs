@@ -213,6 +213,10 @@ impl<'a> Raptor<'a> {
         self.stop_index[stop_id]
     }
 
+    pub fn num_stops(&self) -> usize {
+        self.stops.len()
+    }
+
     pub fn query(&self, start: StopIndex, start_time: Timestamp, end: StopIndex) -> Vec<Leg> {
         let start = start as usize;
         let end = end as usize;
