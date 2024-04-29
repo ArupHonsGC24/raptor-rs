@@ -3,6 +3,14 @@ name = "raptor-rs"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "raptor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "raptor-run"
+path = "src/main.rs"
+
 # Open Street Map import osm4routing2
 
 [dependencies]
@@ -15,4 +23,3 @@ default-features = false
 [dependencies.gtfs-structures]
 version = "0.41.2"
 default-features = false
-features = []

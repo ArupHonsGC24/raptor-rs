@@ -356,20 +356,6 @@ impl<'a> Raptor<'a> {
             }
         }
 
-        if false {
-            println!();
-            let mut sorted_stops = (0..self.stops.len()).collect::<Vec<_>>();
-            sorted_stops.sort_unstable_by_key(|&stop| &self.stops[stop].name);
-            for stop in sorted_stops {
-                println!(
-                    "Earliest arrival time at {}: {}",
-                    utils::get_short_stop_name(&self.stops[stop].name),
-                    utils::get_time_str(tau_star[stop].0)
-                );
-            }
-            println!();
-        }
-
         // Reconstruct trip from parent pointers
         let mut journey = Vec::new();
         let mut current_stop_opt = Some(end);
@@ -396,5 +382,31 @@ impl<'a> Raptor<'a> {
 
     pub fn set_transfer_time_for_stop(&mut self, stop_id: &str, transfer_time: Timestamp) {
         self.transfer_time[self.stop_index[stop_id] as usize] = transfer_time;
+    }
+
+    pub fn print_journey(&self, journey: &[Leg]) {
+        print!("-----------------------------------------------");
+        if journey.len() > 0 {
+            for leg in journey {
+                println!();
+                println!(
+                    "Board at {} at {} ({} line).",
+                    utils::get_short_stop_name(&self.get_stop(leg.boarded_stop).name),
+                    utils::get_time_str(leg.boarded_time),
+                    leg.line,
+                );
+                println!(
+                    "Arrive at {} at {}.",
+                    utils::get_short_stop_name(&self.get_stop(leg.arrival_stop).name),
+                    utils::get_time_str(leg.arrival_time)
+                );
+            }
+            println!();
+            println!("Total journey time: {} minutes.", (journey.last().unwrap().arrival_time - journey[0].boarded_time) / 60);
+        } else {
+            println!();
+            println!("No journey found.");
+        }
+        println!("-----------------------------------------------");
     }
 }

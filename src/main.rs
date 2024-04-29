@@ -96,22 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "Query took {}μs.",
             (query_end - query_start).as_micros() / 10
         );
-        
-        println!("-----------------------------------------------");
-        for leg in journey {
-            println!(
-                "Board at {} at {} ({} line)",
-                utils::get_short_stop_name(&raptor.get_stop(leg.boarded_stop).name),
-                utils::get_time_str(leg.boarded_time),
-                leg.line,
-            );
-            println!(
-                "Arrive at {} at {}",
-                utils::get_short_stop_name(&raptor.get_stop(leg.arrival_stop).name),
-                utils::get_time_str(leg.arrival_time)
-            );
-            println!();
-        }
-        println!("-----------------------------------------------");
+
+        raptor.print_journey(&journey);
     }
 }
