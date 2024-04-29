@@ -86,8 +86,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("End: {}", raptor.get_stop(end).name);
         println!();
 
-        let journey = raptor.query(start, start_time, end);
-
+        let mut journey = Vec::new();
+        let query_start = std::time::Instant::now();
+        for _ in 0..10 {
+            journey = raptor.query(start, start_time, end)
+        };
+        let query_end = std::time::Instant::now();
+        println!(
+            "Query took {}μs.",
+            (query_end - query_start).as_micros() / 10
+        );
+        
         println!("-----------------------------------------------");
         for leg in journey {
             println!(
