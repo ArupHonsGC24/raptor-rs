@@ -216,6 +216,18 @@ impl<'a> Raptor<'a> {
     pub fn num_stops(&self) -> usize {
         self.stops.len()
     }
+    
+    pub fn num_routes(&self) -> usize {
+        self.routes.len()
+    }
+    
+    pub fn num_trips(&self, route_idx: usize) -> usize {
+        self.routes[route_idx].num_trips as usize
+    }
+    
+    pub fn num_stops_in_route(&self, route_idx: usize) -> usize {
+        self.routes[route_idx].num_stops as usize
+    }
 
     pub fn query(&self, start: StopIndex, start_time: Timestamp, end: StopIndex) -> Vec<Leg> {
         let start = start as usize;
@@ -386,6 +398,12 @@ impl<'a> Raptor<'a> {
 
     pub fn set_transfer_time_for_stop(&mut self, stop_id: &str, transfer_time: Timestamp) {
         self.transfer_time[self.stop_index[stop_id] as usize] = transfer_time;
+    }
+    
+    // TODO: Extract out this sort of thing to separate structure (separate crate?).
+    pub fn get_trip(&self, route_idx: usize, trip_idx: usize) -> &[StopTime] {
+        let route = &self.routes[route_idx];
+        route.get_trip(trip_idx, &self.stop_times)
     }
 
     pub fn print_journey(&self, journey: &[Leg]) {
