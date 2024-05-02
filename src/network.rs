@@ -68,6 +68,12 @@ pub struct Network {
 }
 
 impl Network {
+}
+
+impl Network {
+}
+
+impl Network {
     pub fn new(gtfs: &Gtfs, journey_date: NaiveDate, default_transfer_time: Timestamp) -> Self {
         // We use one stop index as the direction of the trip when grouping as routes.
         assert!(
@@ -193,9 +199,21 @@ impl Network {
         self.transfer_times[stop_idx] = transfer_time;
     }
 
-    pub fn get_stop(&self, stop: StopIndex) -> &Stop { &self.stops[stop as usize] }
+    pub fn get_stop(&self, stop: usize) -> &Stop { &self.stops[stop] }
 
     pub fn get_stop_idx(&self, stop_id: &str) -> StopIndex { self.stop_index[stop_id] }
+
+    pub fn get_stop_in_route(&self, route_idx: usize, stop_order: usize) -> StopIndex {
+        self.routes[route_idx].get_stops(&self.route_stops)[stop_order]
+    }
+
+    pub fn get_departure_time(&self, route_idx: usize, trip_idx: usize, stop_idx: usize) -> Timestamp {
+       self.get_trip(route_idx, trip_idx)[stop_idx].departure_time
+    }
+
+    pub fn get_arrival_time(&self, route_idx: usize, trip_idx: usize, stop_idx: usize) -> Timestamp {
+        self.get_trip(route_idx, trip_idx)[stop_idx].arrival_time
+    }
 
     pub fn num_stops(&self) -> usize { self.stops.len() }
 

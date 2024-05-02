@@ -226,8 +226,8 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
         }
         let (arrival_time, boarded_leg) = &tau_star[current_stop];
         if let Some(boarded_leg) = boarded_leg {
-            let boarded_stop_name = utils::get_short_stop_name(&network.get_stop(boarded_leg.boarded_stop).name);
-            let arrival_stop_name = utils::get_short_stop_name(&network.get_stop(current_stop as StopIndex).name);
+            let boarded_stop_name = utils::get_short_stop_name(&network.get_stop(boarded_leg.boarded_stop as usize).name);
+            let arrival_stop_name = utils::get_short_stop_name(&network.get_stop(current_stop).name);
             legs.push(Leg {
                 boarded_stop: boarded_leg.boarded_stop,
                 boarded_stop_name: boarded_stop_name.to_owned().into_boxed_str(),
