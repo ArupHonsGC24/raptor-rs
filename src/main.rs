@@ -1,11 +1,13 @@
 mod raptor;
 mod utils;
+mod network;
 
 use chrono::NaiveDate;
 use gtfs_structures::Gtfs;
 use std::io::{stdout, Write};
 
-use raptor::Raptor;
+use raptor::raptor_query;
+use raptor::Journey;
 
 pub fn get_stop_from_user(gtfs: &Gtfs, prompt: &str) -> Result<String, std::io::Error> {
     loop {
@@ -54,12 +56,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!();
 
-    let mut raptor = Raptor::new(&gtfs, journey_date, 3 * 60);
+    let default_transfer_time = 3 * 60;
+    let mut network = network::Network::new(&gtfs, journey_date, default_transfer_time);
     // Hardcode extra time at Flinders Street Station.
-    raptor.set_transfer_time_for_stop("19854", 4 * 60);
+    network.set_transfer_time_for_stop("19854", 4 * 60);
 
     loop {
-        let start = raptor.get_stop_idx(get_stop_from_user(&gtfs, "starting")?.as_str());
+        let start = network.get_stop_idx(get_stop_from_user(&gtfs, "starting")?.as_str());
         let start_time = loop {
             let mut time_str = String::new();
             print!("What time are you starting? (HH:MM): ");
@@ -75,21 +78,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         };
-        let end = raptor.get_stop_idx(get_stop_from_user(&gtfs, "going")?.as_str());
+        let end = network.get_stop_idx(get_stop_from_user(&gtfs, "going")?.as_str());
 
         println!();
         println!(
             "Start: {} at time {}",
-            raptor.get_stop(start).name,
+            network.get_stop(start).name,
             utils::get_time_str(start_time)
         );
-        println!("End: {}", raptor.get_stop(end).name);
+        println!("End: {}", network.get_stop(end).name);
         println!();
 
-        let mut journey = Vec::new();
+        let mut journey = Journey::new();
         let query_start = std::time::Instant::now();
         for _ in 0..10 {
-            journey = raptor.query(start, start_time, end)
+            journey = raptor_query(&network, start, start_time, end)
         };
         let query_end = std::time::Instant::now();
         println!(
@@ -97,6 +100,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (query_end - query_start).as_micros() / 10
         );
 
-        raptor.print_journey(&journey);
+        println!("{journey}");
     }
 }

@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use gtfs_structures::{Gtfs, Trip};
-use crate::raptor::Timestamp;
+use crate::network::Timestamp;
 
 pub(crate) trait OptionExt<T> {
     fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool;
