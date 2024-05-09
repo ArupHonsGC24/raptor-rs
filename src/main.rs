@@ -5,6 +5,7 @@ mod network;
 use chrono::NaiveDate;
 use gtfs_structures::Gtfs;
 use std::io::{stdout, Write};
+use ::raptor::Network;
 
 use raptor::raptor_query;
 use raptor::Journey;
@@ -15,11 +16,8 @@ pub fn get_stop_from_user(gtfs: &Gtfs, prompt: &str) -> Result<String, std::io::
         stdout().flush()?;
         let mut stop_name = String::new();
         std::io::stdin().read_line(&mut stop_name)?;
-        let stop_name = stop_name.trim().to_lowercase();
         if let Some(stop) = gtfs.stops.values().find(|stop| {
-            utils::get_short_stop_name(stop.name.as_ref().unwrap())
-                .to_lowercase()
-                .contains(&stop_name)
+            Network::stop_name_cmp(stop.name.as_ref().unwrap(), &stop_name)
         }) {
             return Ok(stop.id.clone());
         }
@@ -57,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     let default_transfer_time = 3 * 60;
-    let mut network = network::Network::new(&gtfs, journey_date, default_transfer_time);
+    let mut network = Network::new(&gtfs, journey_date, default_transfer_time);
     // Hardcode extra time at Flinders Street Station.
     network.set_transfer_time_for_stop("19854", 4 * 60);
 
@@ -83,10 +81,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
         println!(
             "Start: {} at time {}",
-            network.get_stop(start).name,
+            network.get_stop(start as usize).name,
             utils::get_time_str(start_time)
         );
-        println!("End: {}", network.get_stop(end).name);
+        println!("End: {}", network.get_stop(end as usize).name);
         println!();
 
         let mut journey = Journey::new();

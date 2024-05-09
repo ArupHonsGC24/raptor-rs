@@ -39,14 +39,16 @@ pub struct StopTime {
 
 pub struct Stop {
     pub name: Box<str>,
+    pub id: Box<str>,
     pub routes_idx: usize,
     pub num_routes: usize,
 }
 
 impl Stop {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, id: String) -> Self {
         Self {
             name: name.into_boxed_str(),
+            id: id.into_boxed_str(),
             routes_idx: 0,
             num_routes: 0,
         }
@@ -67,11 +69,9 @@ pub struct Network {
     pub transfer_times: Vec<Timestamp>,
 }
 
-impl Network {
-}
+impl Network {}
 
-impl Network {
-}
+impl Network {}
 
 impl Network {
     pub fn new(gtfs: &Gtfs, journey_date: NaiveDate, default_transfer_time: Timestamp) -> Self {
@@ -87,7 +87,7 @@ impl Network {
         let mut stops = Vec::with_capacity(gtfs.stops.len());
         for (i, (id, value)) in gtfs.stops.iter().enumerate() {
             stop_index.insert(id.clone(), i as StopIndex);
-            stops.push(Stop::new(value.name.as_ref().unwrap().to_string()));
+            stops.push(Stop::new(value.name.as_ref().unwrap().to_string(), id.clone()));
         }
 
         // Construct our own routes as collections of trips, because the ones defined in the GTFS contain different amounts of stops.
@@ -203,12 +203,20 @@ impl Network {
 
     pub fn get_stop_idx(&self, stop_id: &str) -> StopIndex { self.stop_index[stop_id] }
 
+    pub fn stop_name_cmp(a: &str, b: &str) -> bool {
+        a.to_lowercase().replace(" ", "").contains(&b.to_lowercase().replace(" ", ""))
+    }
+    
+    pub fn get_stop_idx_from_name(&self, stop_name: &str) -> Option<StopIndex> {
+        self.stops.iter().find(|&stop| Network::stop_name_cmp(&stop.name, stop_name)).map(|stop| self.stop_index[stop.id.as_ref()])
+    }
+
     pub fn get_stop_in_route(&self, route_idx: usize, stop_order: usize) -> StopIndex {
         self.routes[route_idx].get_stops(&self.route_stops)[stop_order]
     }
 
     pub fn get_departure_time(&self, route_idx: usize, trip_idx: usize, stop_idx: usize) -> Timestamp {
-       self.get_trip(route_idx, trip_idx)[stop_idx].departure_time
+        self.get_trip(route_idx, trip_idx)[stop_idx].departure_time
     }
 
     pub fn get_arrival_time(&self, route_idx: usize, trip_idx: usize, stop_idx: usize) -> Timestamp {
