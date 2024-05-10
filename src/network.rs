@@ -60,19 +60,25 @@ impl Stop {
 }
 
 pub struct Network {
+    // Metadata for routes in the network.
     pub routes: Vec<Route>,
+    // Metadata for stops in the network.
     pub stops: Vec<Stop>,
+    // The stop index for a given stop ID.
     pub stop_index: HashMap<String, StopIndex>,
+    // The stop times for each trip (Indexed by [route.stop_times_idx..(route.stop_times_idx + route.num_trips * route.num_stops)]).
     pub stop_times: Vec<StopTime>,
+    // The routes for each route (Indexed by [stop.routes_idx..(self.routes_idx + self.num_routes)]).
     pub stop_routes: Vec<RouteIndex>,
+    // The stops in each route (Indexed by [route.route_stops_idx..(route.route_stops_idx + route.num_stops)]).
     pub route_stops: Vec<StopIndex>,
+    // Transfer time between stops in seconds (Indexed by stop index).
     pub transfer_times: Vec<Timestamp>,
+    // The date for which the network is valid.
+    pub date: NaiveDate,
 }
 
-impl Network {}
-
-impl Network {}
-
+#[allow(dead_code)]
 impl Network {
     pub fn new(gtfs: &Gtfs, journey_date: NaiveDate, default_transfer_time: Timestamp) -> Self {
         // We use one stop index as the direction of the trip when grouping as routes.
@@ -191,6 +197,7 @@ impl Network {
             stop_routes,
             route_stops,
             transfer_times,
+            date: journey_date,
         }
     }
 

@@ -3,12 +3,11 @@ mod utils;
 mod network;
 
 use chrono::NaiveDate;
-use gtfs_structures::Gtfs;
+use gtfs_structures::{Gtfs, GtfsReader};
 use std::io::{stdout, Write};
-use ::raptor::Network;
 
-use raptor::raptor_query;
-use raptor::Journey;
+use raptor::{Journey, raptor_query};
+use network::Network;
 
 pub fn get_stop_from_user(gtfs: &Gtfs, prompt: &str) -> Result<String, std::io::Error> {
     loop {
@@ -26,7 +25,7 @@ pub fn get_stop_from_user(gtfs: &Gtfs, prompt: &str) -> Result<String, std::io::
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let gtfs = Gtfs::new("../gtfs/2/google_transit.zip")?;
+    let gtfs = GtfsReader::default().read_shapes(false).read("../gtfs/2/google_transit.zip")?;
 
     // GTFS optional fields that are unwrapped: stop.name, trip.direction_id, stop_time.arrival_time, stop_time.departure_time.
     println!(
