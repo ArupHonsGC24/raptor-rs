@@ -19,6 +19,7 @@ pub struct Route {
     pub num_trips: TripIndex,
     pub route_stops_idx: usize,
     pub stop_times_idx: usize,
+    pub color: (u8,u8,u8),
 }
 
 impl Route {
@@ -72,6 +73,8 @@ pub struct Network {
     pub stop_routes: Vec<RouteIndex>,
     // The stops in each route (Indexed by [route.route_stops_idx..(route.route_stops_idx + route.num_stops)]).
     pub route_stops: Vec<StopIndex>,
+    // The Latitudes and Longitudes of each stop.
+    pub stop_points: Vec<(f32, f32)>,
     // Transfer time between stops in seconds (Indexed by stop index).
     pub transfer_times: Vec<Timestamp>,
     // The date for which the network is valid.
@@ -153,6 +156,11 @@ impl Network {
                 num_trips: route_trips.len() as TripIndex,
                 route_stops_idx: route_stops.len(),
                 stop_times_idx: stop_times.len(),
+                color: (
+                    first_route.color.r,
+                    first_route.color.g,
+                    first_route.color.b,
+                ),
             });
 
             // Because of how routes are constructed, all trips in a route have the same stops.
@@ -187,6 +195,13 @@ impl Network {
             stop.num_routes = stop_routes.len() - stop.routes_idx;
         }
 
+        // Precalculate stop points.
+        let mut stop_points = Vec::with_capacity(stops.len());
+        for stop_id in gtfs.stops.keys() {
+            let stop = &gtfs.stops[stop_id];
+            stop_points.push((stop.longitude.unwrap() as f32, stop.latitude.unwrap() as f32));
+        }
+
         let transfer_times = vec![default_transfer_time; stops.len()];
 
         Self {
@@ -196,6 +211,7 @@ impl Network {
             stop_times,
             stop_routes,
             route_stops,
+            stop_points,
             transfer_times,
             date: journey_date,
         }
