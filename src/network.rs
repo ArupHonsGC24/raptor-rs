@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use chrono::NaiveDate;
 use gtfs_structures::{DirectionType, Gtfs, Trip};
+use rgb::RGB8;
 use crate::utils;
 
 pub type Timestamp = u32;
@@ -13,13 +14,99 @@ pub type StopBitfield = bnum::BUint<STOP_BITFIELD_LENGTH>;
 pub type RouteIndex = u32;
 pub type TripIndex = u32;
 
+#[derive(Clone, Copy)]
+pub struct NetworkPoint {
+    pub latitude: f32,
+    pub longitude: f32,
+}
+
+impl NetworkPoint {
+    const EARTH_RADIUS: f32 = 6371.; // km
+    const CLOSE_THRESHOLD: f32 = 0.1; // 0.1 km = 100 m, because shaped points sometimes aren't exactly on station points. Closest stations are 504 m apart (West and North Richmond).
+
+    // Equirectangular projection (on a unit sphere).
+    pub fn equirectangular_delta(self, other: NetworkPoint) -> (f32, f32) {
+        let x = (other.longitude - self.longitude).to_radians() * ((other.latitude + self.latitude) * 0.5).to_radians().cos();
+        let y = (other.latitude - self.latitude).to_radians();
+        (x, y)
+    }
+
+    pub fn distance(self, other: NetworkPoint) -> f32 {
+        // Equirectangular projection works for small distances.
+        let (x, y) = self.equirectangular_delta(other);
+        return (x * x + y * y).sqrt() * Self::EARTH_RADIUS;
+
+        // Haversine formula.
+        //let lat_diff = (self.latitude - other.latitude).to_radians();
+        //let lon_diff = (self.longitude - other.longitude).to_radians();
+        //let a = (lat_diff / 2.0).sin().powi(2)
+        //    + self.latitude.to_radians().cos()
+        //        * other.latitude.to_radians().cos()
+        //        * (lon_diff / 2.0).sin().powi(2);
+        //let c = 2.0 * a.sqrt().asin();
+        //Self::EARTH_RADIUS * c
+    }
+
+    #[allow(dead_code)]
+    pub fn very_close(self, other: NetworkPoint) -> bool {
+        self.distance(other) < Self::CLOSE_THRESHOLD
+    }
+
+    // Offset is given in metres.
+    #[allow(dead_code)]
+    pub fn left_offset(&self, other: NetworkPoint, offset: f32) -> NetworkPoint {
+        let lat1_rad = self.latitude.to_radians();
+        let lon1_rad = self.longitude.to_radians();
+        let lat2_rad = other.latitude.to_radians();
+        let lon2_rad = other.longitude.to_radians();
+
+        let (lat1_sin, lat1_cos) = lat1_rad.sin_cos();
+        let (lat2_sin, lat2_cos) = lat2_rad.sin_cos();
+        let delta_long = lon2_rad - lon1_rad;
+        let (delta_long_sin, delta_long_cos) = delta_long.sin_cos();
+
+        // Calculate bearing: https://www.movable-type.co.uk/scripts/latlong.html.
+        let y = delta_long_sin * lat2_cos;
+        let x = lat1_cos * lat2_sin - lat1_sin * lat2_cos * delta_long_cos;
+
+        // Find bearing, and rotate anticlockwise by 90 degrees.
+        let bearing = y.atan2(x) - 90f32.to_radians();
+        let (bearing_sin, bearing_cos) = bearing.sin_cos();
+
+        let offset_rad = offset * 0.001 / Self::EARTH_RADIUS;
+        let (offset_sin, offset_cos) = offset_rad.sin_cos();
+        let lat = (lat1_sin * offset_cos + lat1_cos * offset_sin * bearing_cos).asin();
+        let lon = lon1_rad + (bearing_sin * offset_sin * lat1_cos).atan2(offset_cos - lat1_sin * lat.sin());
+
+        NetworkPoint {
+            latitude: lat.to_degrees(),
+            longitude: lon.to_degrees(),
+        }
+
+        // Equirectangular projection works for small distances.
+        // let delta_longitude = self.longitude - other.longitude;
+        // let delta_latitude = self.latitude - other.latitude;
+        // let size = (delta_longitude * delta_longitude + delta_latitude * delta_latitude).sqrt();
+        // let normal = (delta_longitude, delta_latitude) / size;
+        // let rotated_normal = (normal.1, -normal.0);
+        // 
+        // return NetworkPoint {
+        //     latitude: self.latitude + rotated.1.to_degrees(),
+        //     longitude: self.longitude + rotated.0.to_radians(),
+        // };
+    }
+}
+
 pub struct Route {
     pub line: Rc<str>,
     pub num_stops: StopIndex,
     pub num_trips: TripIndex,
     pub route_stops_idx: usize,
     pub stop_times_idx: usize,
-    pub color: (u8,u8,u8),
+    // Visual properties
+    pub colour: RGB8,
+    pub shape: Box<[NetworkPoint]>,
+    pub shape_height: f32,
 }
 
 impl Route {
@@ -74,7 +161,7 @@ pub struct Network {
     // The stops in each route (Indexed by [route.route_stops_idx..(route.route_stops_idx + route.num_stops)]).
     pub route_stops: Vec<StopIndex>,
     // The Latitudes and Longitudes of each stop.
-    pub stop_points: Vec<(f32, f32)>,
+    pub stop_points: Vec<NetworkPoint>,
     // Transfer time between stops in seconds (Indexed by stop index).
     pub transfer_times: Vec<Timestamp>,
     // The date for which the network is valid.
@@ -135,6 +222,11 @@ impl Network {
         let mut routes = Vec::new();
         let mut route_stops = Vec::new();
         let mut stop_times = Vec::new();
+
+        // Keep track of the height of each colour.
+        let mut colour_to_height_map = HashMap::new();
+        let mut last_height = 0f32;
+
         for route_trips in routes_map.values_mut() {
             let first_trip = match route_trips.get(0) {
                 Some(&first_trip) => first_trip,
@@ -150,17 +242,35 @@ impl Network {
 
             let first_route = &gtfs.routes[first_trip.route_id.as_str()];
             let line_name = first_route.short_name.as_ref().unwrap();
+
+            // Determine height based on colour. TODO: Hardcode heights for colours for consistency.
+            let colour = first_route.color;
+            let height = if let Some(&height) = colour_to_height_map.get(&colour) {
+                height
+            } else {
+                last_height += 10.;
+                colour_to_height_map.insert(colour, last_height);
+                last_height
+            };
+
+            // Extract shape.
+            let shapes = &gtfs.shapes[first_trip.shape_id.as_ref().unwrap().as_str()];
+            let mut shape = Vec::with_capacity(shapes.len());
+            for shape_point in shapes.iter() {
+                shape.push(NetworkPoint {
+                    longitude: shape_point.longitude as f32,
+                    latitude: shape_point.latitude as f32,
+                });
+            }
             routes.push(Route {
                 line: Rc::from(line_name.as_str()),
                 num_stops: first_trip.stop_times.len() as StopIndex,
                 num_trips: route_trips.len() as TripIndex,
                 route_stops_idx: route_stops.len(),
                 stop_times_idx: stop_times.len(),
-                color: (
-                    first_route.color.r,
-                    first_route.color.g,
-                    first_route.color.b,
-                ),
+                colour,
+                shape: shape.into_boxed_slice(),
+                shape_height: height,
             });
 
             // Because of how routes are constructed, all trips in a route have the same stops.
@@ -199,7 +309,7 @@ impl Network {
         let mut stop_points = Vec::with_capacity(stops.len());
         for stop_id in gtfs.stops.keys() {
             let stop = &gtfs.stops[stop_id];
-            stop_points.push((stop.longitude.unwrap() as f32, stop.latitude.unwrap() as f32));
+            stop_points.push(NetworkPoint { longitude: stop.longitude.unwrap() as f32, latitude: stop.latitude.unwrap() as f32 });
         }
 
         let transfer_times = vec![default_transfer_time; stops.len()];
@@ -229,7 +339,7 @@ impl Network {
     pub fn stop_name_cmp(a: &str, b: &str) -> bool {
         a.to_lowercase().replace(" ", "").contains(&b.to_lowercase().replace(" ", ""))
     }
-    
+
     pub fn get_stop_idx_from_name(&self, stop_name: &str) -> Option<StopIndex> {
         self.stops.iter().find(|&stop| Network::stop_name_cmp(&stop.name, stop_name)).map(|stop| self.stop_index[stop.id.as_ref()])
     }
@@ -257,5 +367,24 @@ impl Network {
     pub fn get_trip(&self, route_idx: usize, trip_idx: usize) -> &[StopTime] {
         let route = &self.routes[route_idx];
         route.get_trip(trip_idx, &self.stop_times)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn west_north_richmond() {
+        let west_richmond = NetworkPoint {
+            latitude: -37.8149489647782,
+            longitude: 144.991422784199,
+        };
+        let north_richmond = NetworkPoint {
+            latitude: -37.8103983564789,
+            longitude: 144.992500261754,
+        };
+        let distance = west_richmond.distance(north_richmond);
+        assert!((distance - 0.5146).abs() < NetworkPoint::CLOSE_THRESHOLD)
     }
 }
