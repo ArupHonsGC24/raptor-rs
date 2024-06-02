@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("End: {}", network.get_stop(end as usize).name);
         println!();
 
-        let mut journey = Journey::new();
+        let mut journey = Journey::from(Vec::new(), &network);
         let query_start = std::time::Instant::now();
         for _ in 0..10 {
             journey = raptor_query(&network, start, start_time, end)

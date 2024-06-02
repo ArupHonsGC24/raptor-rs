@@ -52,13 +52,14 @@ impl NetworkPoint {
         self.distance(other) < Self::CLOSE_THRESHOLD
     }
 
+    // Used to offset shape based on the direction of the trip, so that inbound and outbound trips are drawn on opposite sides of the track.
     // Offset is given in metres.
     #[allow(dead_code)]
-    pub fn left_offset(&self, other: NetworkPoint, offset: f32) -> NetworkPoint {
+    pub fn left_offset(&self, next_point: NetworkPoint, offset: f32) -> NetworkPoint {
         let lat1_rad = self.latitude.to_radians();
         let lon1_rad = self.longitude.to_radians();
-        let lat2_rad = other.latitude.to_radians();
-        let lon2_rad = other.longitude.to_radians();
+        let lat2_rad = next_point.latitude.to_radians();
+        let lon2_rad = next_point.longitude.to_radians();
 
         let (lat1_sin, lat1_cos) = lat1_rad.sin_cos();
         let (lat2_sin, lat2_cos) = lat2_rad.sin_cos();
@@ -113,10 +114,13 @@ impl Route {
     pub fn get_stops<'a>(&self, route_stops: &'a [StopIndex]) -> &'a [StopIndex] {
         &route_stops[self.route_stops_idx..(self.route_stops_idx + self.num_stops as usize)]
     }
-    pub fn get_trip<'a>(&self, trip: usize, stop_times: &'a [StopTime]) -> &'a [StopTime] {
+    pub fn get_trip_range(&self, trip: usize) -> std::ops::Range<usize> {
         let start = self.stop_times_idx + trip * self.num_stops as usize;
         let end = start + self.num_stops as usize;
-        &stop_times[start..end]
+        start..end
+    }
+    pub fn get_trip<'a>(&self, trip: usize, stop_times: &'a [StopTime]) -> &'a [StopTime] {
+        &stop_times[self.get_trip_range(trip)]
     }
 }
 
