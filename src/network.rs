@@ -28,13 +28,14 @@ impl NetworkPoint {
     pub fn equirectangular_delta(self, other: NetworkPoint) -> (f32, f32) {
         let x = (other.longitude - self.longitude).to_radians() * ((other.latitude + self.latitude) * 0.5).to_radians().cos();
         let y = (other.latitude - self.latitude).to_radians();
-        (x, y)
+        (x * Self::EARTH_RADIUS, y * Self::EARTH_RADIUS)
     }
 
+    // Distance is returned in km.
     pub fn distance(self, other: NetworkPoint) -> f32 {
         // Equirectangular projection works for small distances.
         let (x, y) = self.equirectangular_delta(other);
-        return (x * x + y * y).sqrt() * Self::EARTH_RADIUS;
+        return (x * x + y * y).sqrt();
 
         // Haversine formula.
         //let lat_diff = (self.latitude - other.latitude).to_radians();
