@@ -1,24 +1,21 @@
-mod raptor;
-mod utils;
-mod network;
-
-use chrono::NaiveDate;
-use gtfs_structures::{Gtfs, GtfsReader};
 use std::io::{stdout, Write};
 
-use raptor::{Journey, raptor_query};
-use network::Network;
+use chrono::NaiveDate;
+use gtfs_structures::GtfsReader;
 
-pub fn get_stop_from_user(gtfs: &Gtfs, prompt: &str) -> Result<String, std::io::Error> {
+// A bit unorthodox, perhaps, but it lets me make a binary and a library without duplication.
+include!("lib.rs");
+
+use ::raptor::network::StopIndex;
+
+pub fn get_stop_from_user(network: &Network, prompt: &str) -> Result<StopIndex, std::io::Error> {
     loop {
         print!("Where are you {prompt}? ");
         stdout().flush()?;
         let mut stop_name = String::new();
         std::io::stdin().read_line(&mut stop_name)?;
-        if let Some(stop) = gtfs.stops.values().find(|stop| {
-            Network::stop_name_cmp(stop.name.as_ref().unwrap(), &stop_name)
-        }) {
-            return Ok(stop.id.clone());
+        if let Some(stop) = network.get_stop_idx_from_name(stop_name.trim()) {
+            return Ok(stop);
         }
         println!("Stop not found. Please try again.");
     }
@@ -39,10 +36,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get user input for query.
     let journey_date = loop {
         // Default to 2024.
-        let mut date_str = String::from("2024/");
+        // let mut date_str = String::from("2024/");
         print!("When are you travelling (in 2024)? (DD/MM): ");
-        stdout().flush()?;
-        std::io::stdin().read_line(&mut date_str)?;
+        //stdout().flush()?;
+        //std::io::stdin().read_line(&mut date_str)?;
+        let date_str = String::from("2024/10/5");
         match NaiveDate::parse_from_str(date_str.trim(), "%Y/%d/%m") {
             Ok(parsed_date) => break parsed_date,
             Err(e) => {
@@ -57,14 +55,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut network = Network::new(&gtfs, journey_date, default_transfer_time);
     // Hardcode extra time at Flinders Street Station.
     network.set_transfer_time_for_stop("19854", 4 * 60);
+    network.build_connections();
 
     loop {
-        let start = network.get_stop_idx(get_stop_from_user(&gtfs, "starting")?.as_str());
+        //let start = get_stop_from_user(&network, "starting")?;
+        let start = network.get_stop_idx_from_name("cheltenham").unwrap();
         let start_time = loop {
-            let mut time_str = String::new();
+            //let mut time_str = String::new();
             print!("What time are you starting? (HH:MM): ");
             stdout().flush()?;
-            std::io::stdin().read_line(&mut time_str)?;
+            //std::io::stdin().read_line(&mut time_str)?;
+            let time_str = String::from("08:30");
             // Remove trailing whitespace and append seconds so it can be parsed.
             let mut time_str = String::from(time_str.trim_end());
             time_str += ":00";
@@ -75,8 +76,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         };
-        let end = network.get_stop_idx(get_stop_from_user(&gtfs, "going")?.as_str());
-
+        //let end = get_stop_from_user(&network, "going")?;
+        let end = network.get_stop_idx_from_name("greensborough").unwrap();
+        
         println!();
         println!(
             "Start: {} at time {}",
@@ -88,9 +90,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut journey = Journey::from(Vec::new(), &network);
         let query_start = std::time::Instant::now();
-        for _ in 0..10 {
-            journey = raptor_query(&network, start, start_time, end)
-        };
+        //for _ in 0..10 {
+            //journey = raptor_query(&network, start, start_time, end);
+            journey = csa_query(&network, start, start_time, end);
+        //};
         let query_end = std::time::Instant::now();
         println!(
             "Query took {}μs.",
@@ -98,5 +101,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         println!("{journey}");
+        
+        break;
     }
+    
+    Ok(())
 }

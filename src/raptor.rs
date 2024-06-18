@@ -1,74 +1,9 @@
-use std::fmt::Display;
-
-use crate::utils;
+use crate::Journey;
+use crate::journey::{Boarding, TauEntry};
 use crate::network::{Network, RouteIndex, StopIndex, Timestamp, TripIndex};
-use crate::utils::OptionExt;
+use crate::utils::{self, OptionExt};
 
 const K: usize = 8;
-
-// Timestamp is seconds since midnight.
-
-#[derive(Clone)]
-struct Boarding {
-    pub boarded_stop: StopIndex,
-    pub boarded_stop_order: StopIndex,
-    pub boarded_time: Timestamp,
-    pub route_idx: RouteIndex,
-    pub trip_idx: TripIndex,
-}
-
-pub struct Leg {
-    pub boarded_stop: StopIndex,
-    pub boarded_stop_order: StopIndex,
-    pub boarded_time: Timestamp,
-    pub arrival_stop: StopIndex,
-    pub arrival_stop_order: StopIndex,
-    pub arrival_time: Timestamp,
-    pub route_idx: RouteIndex,
-    pub trip_idx: TripIndex,
-}
-
-pub struct Journey<'a> {
-    pub legs: Vec<Leg>,
-    pub network: &'a Network,
-}
-
-impl<'a> Journey<'a> {
-    pub fn from(legs: Vec<Leg>, network: &'a Network) -> Self {
-        Self { legs, network }
-    }
-}
-
-impl Display for Journey<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "-----------------------------------------------")?;
-        if self.legs.len() > 0 {
-            for leg in self.legs.iter() {
-                writeln!(f)?;
-                writeln!(f,
-                         "Board at {} at {} ({} line).",
-                         //leg.boarded_stop_name,
-                         utils::get_short_stop_name(&self.network.get_stop(leg.boarded_stop as usize).name),
-                         utils::get_time_str(leg.boarded_time),
-                         self.network.routes[leg.route_idx as usize].line,
-                )?;
-                writeln!(f,
-                         "Arrive at {} at {}.",
-                         //leg.arrival_stop_name,
-                         utils::get_short_stop_name(&self.network.get_stop(leg.arrival_stop as usize).name),
-                         utils::get_time_str(leg.arrival_time)
-                )?;
-            }
-            writeln!(f, )?;
-            writeln!(f, "Total journey time: {} minutes.", (self.legs.last().unwrap().arrival_time - self.legs[0].boarded_time) / 60)?;
-        } else {
-            writeln!(f)?;
-            writeln!(f, "No journey found.")?;
-        }
-        writeln!(f, "-----------------------------------------------")?;
-        Ok(())
-    }
-}
 
 pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, end: StopIndex) -> Journey {
     let start = start as usize;
@@ -78,11 +13,11 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
     // τ[p][i] = earliest known arrival time at stop p with up to i trips.
     let mut tau = vec![[Timestamp::MAX; K]; num_stops];
     // τ*[p] = earliest known arrival time at stop p.
-    let mut tau_star = vec![(Timestamp::MAX, None); num_stops];
+    let mut tau_star = vec![TauEntry::default(); num_stops];
 
     // Set initial departure time from start station.
     tau[start][0] = start_time;
-    tau_star[start] = (start_time, None);
+    tau_star[start] = TauEntry { time: start_time, boarding: None };
 
     // Array for recording which stops have been marked in the current round.
     let mut marked_stops = vec![false; num_stops];
@@ -95,10 +30,10 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
     for k in 1..K {
         earliest_stop_for_route.fill(Some(0));
         for marked_stop in
-        marked_stops
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &touched)| if touched { Some(i) } else { None })
+            marked_stops
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &touched)| if touched { Some(i) } else { None })
         {
             for &route_idx in network.stops[marked_stop].get_routes(&network.stop_routes) {
                 let route_idx = route_idx as usize;
@@ -107,7 +42,7 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
                     earliest_stop_for_route[route_idx].unwrap_or(route.num_stops as usize);
 
                 for (stop_order, &route_stop) in
-                route.get_stops(&network.route_stops).iter().enumerate()
+                    route.get_stops(&network.route_stops).iter().enumerate()
                 {
                     if stop_order >= earliest_stop_in_route_order {
                         break;
@@ -131,7 +66,7 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
             .filter_map(|(i, stop)| stop.map(|s| (i, s)))
         {
             let route = &network.routes[route_idx];
-            
+
             // This keeps track of when and where we got on the current trip.
             let mut boarding: Option<Boarding> = None;
             for (stop_order, &stop_idx) in route
@@ -141,14 +76,14 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
                 .skip(earliest_stop_order)
             {
                 let stop_idx = stop_idx as usize;
-                
+
                 // Ignore transfer time for first round.
                 let transfer_time = if k > 1 {
                     network.transfer_times[stop_idx]
                 } else {
                     0
                 };
-                
+
                 let current_tau = tau[stop_idx][k - 1].saturating_add(transfer_time);
 
                 // Can the arrival time at this stop be improved in this round?
@@ -157,9 +92,9 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
                     let trip = route.get_trip(boarding.trip_idx as usize, &network.stop_times);
                     let arrival_time = trip[stop_order].arrival_time;
                     current_departure_time = Some(trip[stop_order].departure_time);
-                    if arrival_time < tau_star[stop_idx].0.min(tau_star[end].0) {
+                    if arrival_time < tau_star[stop_idx].time.min(tau_star[end].time) {
                         tau[stop_idx][k] = arrival_time;
-                        tau_star[stop_idx] = (arrival_time, Some(boarding.clone()));
+                        tau_star[stop_idx] = TauEntry { time: arrival_time, boarding: Some(boarding.clone()) };
                         marked_stops[stop_idx] = true;
                     }
                 }
@@ -221,50 +156,6 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
             break;
         }
     }
-
-    // No journey found.
-    if tau_star[end].1.is_none() {
-        return Journey::from(Vec::new(), network);
-    }
     
-    let start = start as StopIndex;
-    let end = end as StopIndex;
-
-    // Reconstruct trip from parent pointers
-    let mut legs = Vec::new();
-    let mut current_stop_opt = Some(end);
-    while let Some(current_stop) = current_stop_opt {
-        if current_stop == start {
-            break;
-        }
-        let (arrival_time, boarded_leg) = &tau_star[current_stop as usize];
-        
-        if let Some(boarded_leg) = boarded_leg {
-            // Find arrival stop order.
-            let route = &network.routes[boarded_leg.route_idx as usize];
-            let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().find_map(|(i, &stop)| {
-                if stop == current_stop {
-                    Some(i as StopIndex)
-                } else {
-                    None
-                }
-            }).expect("Arrival stop not found in route.");
-            
-            legs.push(Leg {
-                boarded_stop: boarded_leg.boarded_stop,
-                boarded_stop_order: boarded_leg.boarded_stop_order,
-                boarded_time: boarded_leg.boarded_time,
-                arrival_stop: current_stop,
-                arrival_stop_order,
-                arrival_time: *arrival_time,
-                route_idx: boarded_leg.route_idx,
-                trip_idx: boarded_leg.trip_idx,
-            });
-        }
-        current_stop_opt = boarded_leg.as_ref().map(|leg| leg.boarded_stop);
-    }
-    
-    legs.reverse();
-
-    Journey::from(legs, network)
+    Journey::from_tau(&tau_star, network, start as StopIndex, end as StopIndex)
 }

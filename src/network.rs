@@ -3,8 +3,10 @@ use std::rc::Rc;
 use chrono::NaiveDate;
 use gtfs_structures::{DirectionType, Gtfs, Trip};
 use rgb::RGB8;
+use crate::journey::Connection;
 use crate::utils;
 
+// Timestamp is seconds since midnight.
 pub type Timestamp = u32;
 pub type StopIndex = u8;
 
@@ -130,6 +132,7 @@ pub struct StopTime {
     pub departure_time: Timestamp,
 }
 
+#[derive(Debug)]
 pub struct Stop {
     pub name: Box<str>,
     pub id: Box<str>,
@@ -138,10 +141,10 @@ pub struct Stop {
 }
 
 impl Stop {
-    pub fn new(name: String, id: String) -> Self {
+    pub fn new(name: &str, id: &str) -> Self {
         Self {
-            name: name.into_boxed_str(),
-            id: id.into_boxed_str(),
+            name: name.to_owned().into_boxed_str(),
+            id: id.to_owned().into_boxed_str(),
             routes_idx: 0,
             num_routes: 0,
         }
@@ -157,6 +160,8 @@ pub struct Network {
     pub routes: Vec<Route>,
     // Metadata for stops in the network.
     pub stops: Vec<Stop>,
+    // Number of trips. Not encoded anywhere else, like stops.len().
+    pub num_trips: usize,
     // The stop index for a given stop ID.
     pub stop_index: HashMap<String, StopIndex>,
     // The stop times for each trip (Indexed by [route.stop_times_idx..(route.stop_times_idx + route.num_trips * route.num_stops)]).
@@ -167,13 +172,14 @@ pub struct Network {
     pub route_stops: Vec<StopIndex>,
     // The Latitudes and Longitudes of each stop.
     pub stop_points: Vec<NetworkPoint>,
+    // A linear list of all connections in the network.
+    pub connections: Vec<Connection>,
     // Transfer time between stops in seconds (Indexed by stop index).
     pub transfer_times: Vec<Timestamp>,
     // The date for which the network is valid.
     pub date: NaiveDate,
 }
 
-#[allow(dead_code)]
 impl Network {
     pub fn new(gtfs: &Gtfs, journey_date: NaiveDate, default_transfer_time: Timestamp) -> Self {
         // We use one stop index as the direction of the trip when grouping as routes.
@@ -188,7 +194,7 @@ impl Network {
         let mut stops = Vec::with_capacity(gtfs.stops.len());
         for (i, (id, value)) in gtfs.stops.iter().enumerate() {
             stop_index.insert(id.clone(), i as StopIndex);
-            stops.push(Stop::new(value.name.as_ref().unwrap().to_string(), id.clone()));
+            stops.push(Stop::new(value.name.as_ref().unwrap(), id));
         }
 
         // Construct our own routes as collections of trips, because the ones defined in the GTFS contain different amounts of stops.
@@ -227,6 +233,7 @@ impl Network {
         let mut routes = Vec::new();
         let mut route_stops = Vec::new();
         let mut stop_times = Vec::new();
+        let mut num_trips = 0;
 
         // Keep track of the height of each colour.
         let mut colour_to_height_map = HashMap::new();
@@ -259,14 +266,19 @@ impl Network {
             };
 
             // Extract shape.
-            let shapes = &gtfs.shapes[first_trip.shape_id.as_ref().unwrap().as_str()];
-            let mut shape = Vec::with_capacity(shapes.len());
-            for shape_point in shapes.iter() {
-                shape.push(NetworkPoint {
-                    longitude: shape_point.longitude as f32,
-                    latitude: shape_point.latitude as f32,
-                });
-            }
+            let shape = if gtfs.shapes.len() > 0 {
+                let shapes = &gtfs.shapes[first_trip.shape_id.as_ref().unwrap().as_str()];
+                let mut shape = Vec::with_capacity(shapes.len());
+                for shape_point in shapes.iter() {
+                    shape.push(NetworkPoint {
+                        longitude: shape_point.longitude as f32,
+                        latitude: shape_point.latitude as f32,
+                    });
+                }
+                shape
+            } else {
+                Vec::new()
+            };
             routes.push(Route {
                 line: Rc::from(line_name.as_str()),
                 num_stops: first_trip.stop_times.len() as StopIndex,
@@ -284,6 +296,7 @@ impl Network {
                 route_stops.push(stop_index[stop_time.stop.id.as_str()]);
             }
 
+            num_trips += route_trips.len();
             for trip in route_trips {
                 for stop_time in trip.stop_times.iter() {
                     stop_times.push(StopTime {
@@ -317,24 +330,61 @@ impl Network {
             stop_points.push(NetworkPoint { longitude: stop.longitude.unwrap() as f32, latitude: stop.latitude.unwrap() as f32 });
         }
 
+
         let transfer_times = vec![default_transfer_time; stops.len()];
 
         Self {
             routes,
             stops,
+            num_trips,
             stop_index,
             stop_times,
             stop_routes,
             route_stops,
             stop_points,
+            connections: Vec::new(), // Will be built later if required.
             transfer_times,
             date: journey_date,
         }
     }
 
     pub fn set_transfer_time_for_stop(&mut self, stop_id: &str, transfer_time: Timestamp) {
+        assert!(self.connections.is_empty(), "Transfer times must be set before building connections.");
+
         let stop_idx = self.get_stop_idx(stop_id) as usize;
         self.transfer_times[stop_idx] = transfer_time;
+    }
+
+    // Call build connections if running a CSA query. Should be called after all transfer times are set.
+    pub fn build_connections(&mut self) {
+        // Construct list of connections from trips in network.
+        let mut connections = Vec::new();
+        for (route_idx, route) in self.routes.iter().enumerate() {
+            let num_stops = route.num_stops as usize;
+            for trip_idx in 0..route.num_trips as usize {
+                for stop_order in 1..num_stops {
+                    connections.push(Connection {
+                        trip_idx: trip_idx as TripIndex,
+                        route_idx: route_idx as RouteIndex,
+                        departure_idx: route.get_stops(&self.route_stops)[stop_order - 1],
+                        departure_stop_order: stop_order as StopIndex - 1,
+                        departure_time: route.get_trip(trip_idx, &self.stop_times)[stop_order - 1].departure_time,
+                        arrival_idx: route.get_stops(&self.route_stops)[stop_order],
+                        arrival_time: route.get_trip(trip_idx, &self.stop_times)[stop_order].arrival_time,
+                    });
+                }
+            }
+        }
+
+        // Sort connections by departure time.
+        connections.sort_unstable_by_key(|x| x.departure_time);
+
+        // Subtract the transfer time from departure time after sorting.
+        for connection in connections.iter_mut() {
+            connection.departure_time -= self.transfer_times[connection.departure_idx as usize];
+        }
+
+        self.connections = connections;
     }
 
     pub fn get_stop(&self, stop: usize) -> &Stop { &self.stops[stop] }
@@ -342,11 +392,11 @@ impl Network {
     pub fn get_stop_idx(&self, stop_id: &str) -> StopIndex { self.stop_index[stop_id] }
 
     pub fn stop_name_cmp(a: &str, b: &str) -> bool {
-        a.to_lowercase().replace(" ", "").contains(&b.to_lowercase().replace(" ", ""))
+        utils::get_short_stop_name(a).to_lowercase().replace(" ", "").contains(&b.to_lowercase().replace(" ", ""))
     }
 
     pub fn get_stop_idx_from_name(&self, stop_name: &str) -> Option<StopIndex> {
-        self.stops.iter().find(|&stop| Network::stop_name_cmp(&stop.name, stop_name)).map(|stop| self.stop_index[stop.id.as_ref()])
+        self.stops.iter().position(|stop| Network::stop_name_cmp(&stop.name, stop_name)).map(|stop_idx| stop_idx as StopIndex)
     }
 
     pub fn get_stop_in_route(&self, route_idx: usize, stop_order: usize) -> StopIndex {
