@@ -45,21 +45,21 @@ pub fn csa_query(network: &Network, start: StopIndex, start_time: Timestamp, end
         if connection.arrival_time < tau[arrival_idx].time {
             tau[arrival_idx].time = connection.arrival_time;
 
-            //if let Some(boarding) = tau[departure_idx].boarding.clone() {
-            //    if boarding.trip_idx == connection.trip_idx {
-            //        tau[arrival_idx].boarding = Some(boarding);
-            //    } else {
-            //        tau[arrival_idx].boarding = Some(Boarding::from(connection));
-            //    }
-            //} else {
-            //    // This should only happen to the start stop.
-            //    tau[departure_idx].boarding = Some(Boarding::from(connection));
-            //    tau[arrival_idx].boarding = tau[departure_idx].boarding.clone();
-            //}
+            if let Some(boarding) = tau[departure_idx].boarding.clone() {
+                if boarding.trip_idx == connection.trip_idx {
+                    tau[arrival_idx].boarding = Some(boarding);
+                } else {
+                    tau[arrival_idx].boarding = Some(Boarding::from(connection));
+                }
+            } else {
+                // This should only happen to the start stop.
+                tau[departure_idx].boarding = Some(Boarding::from(connection));
+                tau[arrival_idx].boarding = tau[departure_idx].boarding.clone();
+            }
 
-            //if arrival_idx == end {
-            //    end_time = connection.arrival_time;
-            //}
+            if arrival_idx == end {
+                end_time = connection.arrival_time;
+            }
         }
     }
     

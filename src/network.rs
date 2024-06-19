@@ -246,12 +246,8 @@ impl Network {
             };
 
             // Sort trips in route based on earliest arrival time.
-            route_trips.sort_unstable_by(|a, b| {
-                a.stop_times[0]
-                    .arrival_time
-                    .cmp(&b.stop_times[0].arrival_time)
-            });
-
+            route_trips.sort_unstable_by_key(|x| { x.stop_times[0].arrival_time });
+            
             let first_route = &gtfs.routes[first_trip.route_id.as_str()];
             let line_name = first_route.short_name.as_ref().unwrap();
 
