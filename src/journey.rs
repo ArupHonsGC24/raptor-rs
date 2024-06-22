@@ -3,7 +3,8 @@ use crate::{Network, utils};
 use crate::network::{RouteIndex, StopIndex, Timestamp, TripIndex};
 
 pub struct Connection {
-    pub trip_idx: TripIndex,
+    pub unique_trip_idx: TripIndex, // Unique across the network.
+    pub trip_idx: TripIndex, // Index of the trip in the route.
     pub route_idx: RouteIndex,
     pub departure_idx: StopIndex,
     pub departure_stop_order: StopIndex,

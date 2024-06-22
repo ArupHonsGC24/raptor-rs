@@ -161,7 +161,7 @@ pub struct Network {
     // Metadata for stops in the network.
     pub stops: Vec<Stop>,
     // Number of trips. Not encoded anywhere else, like stops.len().
-    pub num_trips: usize,
+    pub num_trips: TripIndex,
     // The stop index for a given stop ID.
     pub stop_index: HashMap<String, StopIndex>,
     // The stop times for each trip (Indexed by [route.stop_times_idx..(route.stop_times_idx + route.num_trips * route.num_stops)]).
@@ -233,7 +233,7 @@ impl Network {
         let mut routes = Vec::new();
         let mut route_stops = Vec::new();
         let mut stop_times = Vec::new();
-        let mut num_trips = 0;
+        let mut num_trips = 0 as TripIndex;
 
         // Keep track of the height of each colour.
         let mut colour_to_height_map = HashMap::new();
@@ -292,7 +292,8 @@ impl Network {
                 route_stops.push(stop_index[stop_time.stop.id.as_str()]);
             }
 
-            num_trips += route_trips.len();
+            num_trips += route_trips.len() as TripIndex;
+            
             for trip in route_trips {
                 for stop_time in trip.stop_times.iter() {
                     stop_times.push(StopTime {
@@ -326,7 +327,6 @@ impl Network {
             stop_points.push(NetworkPoint { longitude: stop.longitude.unwrap() as f32, latitude: stop.latitude.unwrap() as f32 });
         }
 
-
         let transfer_times = vec![default_transfer_time; stops.len()];
 
         Self {
@@ -338,7 +338,7 @@ impl Network {
             stop_routes,
             route_stops,
             stop_points,
-            connections: Vec::new(), // Will be built later if required.
+            connections: Vec::new(), // These will be built later if required.
             transfer_times,
             date: journey_date,
         }
@@ -355,20 +355,28 @@ impl Network {
     pub fn build_connections(&mut self) {
         // Construct list of connections from trips in network.
         let mut connections = Vec::new();
+        let mut unique_trip_idx = 0 as TripIndex;
         for (route_idx, route) in self.routes.iter().enumerate() {
+            let route_idx = route_idx as RouteIndex;
             let num_stops = route.num_stops as usize;
+            let stops = route.get_stops(&self.route_stops);
             for trip_idx in 0..route.num_trips as usize {
-                for stop_order in 1..num_stops {
+                let trip = route.get_trip(trip_idx, &self.stop_times);
+                let trip_idx = trip_idx as TripIndex;
+                for arrival_stop_order in 1..num_stops {
+                    let departure_stop_order = arrival_stop_order - 1;
                     connections.push(Connection {
-                        trip_idx: trip_idx as TripIndex,
-                        route_idx: route_idx as RouteIndex,
-                        departure_idx: route.get_stops(&self.route_stops)[stop_order - 1],
-                        departure_stop_order: stop_order as StopIndex - 1,
-                        departure_time: route.get_trip(trip_idx, &self.stop_times)[stop_order - 1].departure_time,
-                        arrival_idx: route.get_stops(&self.route_stops)[stop_order],
-                        arrival_time: route.get_trip(trip_idx, &self.stop_times)[stop_order].arrival_time,
+                        unique_trip_idx,
+                        trip_idx,
+                        route_idx,
+                        departure_idx: stops[departure_stop_order],
+                        departure_stop_order: departure_stop_order as StopIndex,
+                        departure_time: trip[departure_stop_order].departure_time,
+                        arrival_idx: stops[arrival_stop_order],
+                        arrival_time: trip[arrival_stop_order].arrival_time,
                     });
                 }
+                unique_trip_idx += 1;
             }
         }
 
@@ -376,9 +384,9 @@ impl Network {
         connections.sort_unstable_by_key(|x| x.departure_time);
 
         // Subtract the transfer time from departure time after sorting.
-        for connection in connections.iter_mut() {
-            connection.departure_time -= self.transfer_times[connection.departure_idx as usize];
-        }
+        //for connection in connections.iter_mut() {
+        //    connection.departure_time -= self.transfer_times[connection.departure_idx as usize];
+        //}
 
         self.connections = connections;
     }

@@ -51,10 +51,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!();
 
-    let default_transfer_time = 3 * 60;
+    let default_transfer_time = 0 * 60;
     let mut network = Network::new(&gtfs, journey_date, default_transfer_time);
     // Hardcode extra time at Flinders Street Station.
-    network.set_transfer_time_for_stop("19854", 4 * 60);
+    network.set_transfer_time_for_stop("19854", 0 * 60);
     network.build_connections();
 
     loop {
@@ -90,16 +90,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut journey = Journey::from(Vec::new(), &network);
         let query_start = std::time::Instant::now();
-        //for _ in 0..10 {
-            //journey = raptor_query(&network, start, start_time, end);
+        for _ in 0..10 {
+            journey = raptor_query(&network, start, start_time, end);
+        }
+        println!("RAPTOR:");
+        println!("Query took {:?}", query_start.elapsed() / 10);
+        println!("{journey}");
+        let query_start = std::time::Instant::now();
+        for _ in 0..10 {
             journey = csa_query(&network, start, start_time, end);
-        //};
-        let query_end = std::time::Instant::now();
-        println!(
-            "Query took {}μs.",
-            (query_end - query_start).as_micros() / 10
-        );
-
+        }
+        println!("CSA:");
+        println!("Query took {:?}", query_start.elapsed() / 10);
         println!("{journey}");
         
         break;
