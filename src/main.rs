@@ -6,7 +6,7 @@ use gtfs_structures::GtfsReader;
 // A bit unorthodox, perhaps, but it lets me make a binary and a library without duplication.
 include!("lib.rs");
 
-use ::raptor::network::StopIndex;
+use network::StopIndex;
 
 pub fn get_stop_from_user(network: &Network, prompt: &str) -> Result<StopIndex, std::io::Error> {
     loop {

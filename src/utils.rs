@@ -1,8 +1,9 @@
 use chrono::NaiveDate;
 use gtfs_structures::{Gtfs, Trip};
+
 use crate::network::Timestamp;
 
-pub(crate) trait OptionExt<T> {
+pub trait OptionExt<T> {
     fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool;
 }
 
@@ -21,14 +22,24 @@ pub fn is_zero(buf: &[bool]) -> bool {
         && suffix.iter().all(|&x| x == false)
 }
 
+pub const fn get_size_bits<T>() -> usize {
+    std::mem::size_of::<T>() * 8
+}
+
 pub fn get_short_stop_name(stop: &str) -> &str {
     // Convert "Laburnum Railway Station (Blackburn)" to "Laburnum", and "Noble Park Railway Station (Noble Park)" to "Noble Park", etc.
     stop.split(" Railway Station").next().unwrap()
 }
 
-pub(crate) fn does_trip_run(gtfs: &Gtfs, trip: &Trip, date: NaiveDate) -> bool {
-    let calender = &gtfs.calendar[trip.service_id.as_str()];
-    calender.valid_weekday(date) && calender.start_date <= date && date <= calender.end_date
+pub fn does_trip_run(gtfs: &Gtfs, trip: &Trip, date: NaiveDate) -> bool {
+    if let Some(calender) = gtfs.calendar.get(trip.service_id.as_str()) {
+        calender.valid_weekday(date) && calender.start_date <= date && date <= calender.end_date
+    } else if let Some(calender_dates) = gtfs.calendar_dates.get(trip.service_id.as_str()) {
+        calender_dates.iter().any(|calender_date| calender_date.date == date)
+    } else {
+        assert!(false, "Trip {} does not have a valid service_id", trip.id);
+        false
+    }
 }
 
 // Copied from gtfs_structures::serde_helpers, which are private :(

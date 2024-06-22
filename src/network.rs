@@ -8,12 +8,12 @@ use crate::utils;
 
 // Timestamp is seconds since midnight.
 pub type Timestamp = u32;
-pub type StopIndex = u8;
+pub type StopIndex = u16;
+pub type StopBitfield = bnum::BUint<7>; // Maximum 64*7 = 448 stops per route. This is required for the 901 bus route in Melbourne.
 
-const STOP_BITFIELD_LENGTH: usize = (StopIndex::MAX as usize + 1) / 64;
+const STOP_BITFIELD_SIZE_BITS: usize = utils::get_size_bits::<StopBitfield>();
 
-pub type StopBitfield = bnum::BUint<STOP_BITFIELD_LENGTH>;
-pub type RouteIndex = u32;
+pub type RouteIndex = u16;
 pub type TripIndex = u32;
 
 #[derive(Clone, Copy)]
@@ -178,6 +178,7 @@ pub struct Network {
     pub transfer_times: Vec<Timestamp>,
     // The date for which the network is valid.
     pub date: NaiveDate,
+    pub has_shapes: bool,
 }
 
 impl Network {
@@ -185,7 +186,7 @@ impl Network {
         // We use one stop index as the direction of the trip when grouping as routes.
         assert!(
             gtfs.stops.len() < (StopIndex::MAX - 1) as usize,
-            "Too many stops ({}) in GTFS (we currently use a {}-bitfield for stops).",
+            "Too many stops ({}, max {}) in GTFS.",
             gtfs.stops.len(),
             StopIndex::MAX
         );
@@ -197,36 +198,72 @@ impl Network {
             stops.push(Stop::new(value.name.as_ref().unwrap(), id));
         }
 
-        // Construct our own routes as collections of trips, because the ones defined in the GTFS contain different amounts of stops.
-        let mut routes_map = HashMap::new();
-        for (_, trip) in gtfs.trips.iter() {
-            // Only consider trips that run on the given date.
+        // Construct route-local stop indices. TODO: Use struct instead of tuple.
+        let mut route_stop_indices = HashMap::<&str, (StopIndex, Vec<Option<StopIndex>>, Vec<&Trip>)>::new();
+
+        for trip in gtfs.trips.values() {
             if !utils::does_trip_run(&gtfs, &trip, journey_date) {
                 continue;
             }
 
-            // TODO: Group trips by route first so we can use a smaller integer for the bitfield, and handle more stops across the network.
-            // Construct a 256 bit integer where the most significant bit is the direction of the trip, and the rest are stops.
-            let mut stop_field = StopBitfield::from_digit(
-                trip.direction_id.unwrap_or(DirectionType::Outbound) as u64,
-            ) << StopIndex::MAX;
+            let route = route_stop_indices.entry(trip.route_id.as_str()).or_insert((0, vec![None; stops.len()], Vec::new()));
+
+            // Group trips by GTFS route.
+            route.2.push(trip);
+
             for stop_time in trip.stop_times.iter() {
-                let stop_idx = stop_index[stop_time.stop.id.as_str()];
-                stop_field |= StopBitfield::ONE << stop_idx;
+                let stop_idx = &mut route.1[stop_index[stop_time.stop.id.as_str()] as usize];
+                if stop_idx.is_none() {
+                    *stop_idx = Some(route.0);
+                    route.0 += 1;
+                }
             }
-            let route: &mut Vec<&Trip> = routes_map.entry(stop_field).or_default();
-            route.push(trip);
         }
 
+        // Construct our own routes as collections of trips, because the ones defined in the GTFS contain different amounts of stops.
+
+        let mut route_maps = Vec::new();
+
+        let mut num_routes = 0;
+        for (&route_id, (num_stops, mapping, trips)) in route_stop_indices.iter() {
+            // Check that there aren't too many stops in a route.
+            let num_stops = *num_stops as usize;
+            assert!(num_stops < STOP_BITFIELD_SIZE_BITS - 1, "Too many stops in route {route_id} ({}, max {}).", num_stops, STOP_BITFIELD_SIZE_BITS - 1);
+
+            let mut route_map = HashMap::new();
+            for &trip in trips.iter() {
+                // Construct a big integer where the most significant bit is the direction of the trip, and the rest are stops.
+                let mut stop_field = StopBitfield::from(trip.direction_id.unwrap_or(DirectionType::Outbound) as u8) << STOP_BITFIELD_SIZE_BITS - 1;
+                for stop_time in trip.stop_times.iter() {
+                    let stop_idx = stop_index[stop_time.stop.id.as_str()] as usize;
+                    let route_relative_stop_idx = mapping[stop_idx].unwrap();
+                    stop_field |= StopBitfield::ONE << route_relative_stop_idx;
+                }
+                let route: &mut Vec<&Trip> = route_map.entry(stop_field).or_default();
+                route.push(trip);
+            }
+
+            num_routes += route_map.len();
+            route_maps.push(route_map);
+        }
+
+        // Check that grouped trips don't span gtfs routes
+        //for route_trips in routes_map.values() {
+        //    let first_route_id = route_trips[0].route_id.as_str();
+        //    for trip in route_trips {
+        //        assert_eq!(first_route_id, trip.route_id.as_str(), "Trips in a route must have the same route ID.");
+        //    }
+        //}
+
         assert!(
-            routes_map.len() < RouteIndex::MAX as usize,
+            num_routes < RouteIndex::MAX as usize,
             "Too many routes in GTFS (we currently use a {}-bit index for routes).",
-            std::mem::size_of::<RouteIndex>() * 8
+            utils::get_size_bits::<RouteIndex>()
         );
         assert!(
             gtfs.trips.len() < TripIndex::MAX as usize,
             "Too many trips in GTFS (we currently use a {}-bit index for trips).",
-            std::mem::size_of::<TripIndex>() * 8
+            utils::get_size_bits::<TripIndex>()
         );
 
         // Construct routes, which point to a series of stops and stop times.
@@ -239,67 +276,69 @@ impl Network {
         let mut colour_to_height_map = HashMap::new();
         let mut last_height = 0f32;
 
-        for route_trips in routes_map.values_mut() {
-            let first_trip = match route_trips.get(0) {
-                Some(&first_trip) => first_trip,
-                None => continue,
-            };
+        for route_map in route_maps.iter_mut() {
+            for route_trips in route_map.values_mut() {
+                let first_trip = match route_trips.get(0) {
+                    Some(&first_trip) => first_trip,
+                    None => continue,
+                };
 
-            // Sort trips in route based on earliest arrival time.
-            route_trips.sort_unstable_by_key(|x| { x.stop_times[0].arrival_time });
-            
-            let first_route = &gtfs.routes[first_trip.route_id.as_str()];
-            let line_name = first_route.short_name.as_ref().unwrap();
+                // Sort trips in route based on earliest arrival time.
+                route_trips.sort_unstable_by_key(|x| { x.stop_times[0].arrival_time });
 
-            // Determine height based on colour. TODO: Hardcode heights for colours for consistency.
-            let colour = first_route.color;
-            let height = if let Some(&height) = colour_to_height_map.get(&colour) {
-                height
-            } else {
-                last_height += 10.;
-                colour_to_height_map.insert(colour, last_height);
-                last_height
-            };
+                let first_route = &gtfs.routes[first_trip.route_id.as_str()];
+                let line_name = first_route.short_name.as_ref().unwrap();
 
-            // Extract shape.
-            let shape = if gtfs.shapes.len() > 0 {
-                let shapes = &gtfs.shapes[first_trip.shape_id.as_ref().unwrap().as_str()];
-                let mut shape = Vec::with_capacity(shapes.len());
-                for shape_point in shapes.iter() {
-                    shape.push(NetworkPoint {
-                        longitude: shape_point.longitude as f32,
-                        latitude: shape_point.latitude as f32,
-                    });
+                // Determine height based on colour. TODO: Hardcode heights for colours for consistency.
+                let colour = first_route.color;
+                let height = if let Some(&height) = colour_to_height_map.get(&colour) {
+                    height
+                } else {
+                    last_height += 10.;
+                    colour_to_height_map.insert(colour, last_height);
+                    last_height
+                };
+
+                // Extract shape.
+                let shape = if gtfs.shapes.len() > 0 {
+                    let shapes = &gtfs.shapes[first_trip.shape_id.as_ref().unwrap().as_str()];
+                    let mut shape = Vec::with_capacity(shapes.len());
+                    for shape_point in shapes.iter() {
+                        shape.push(NetworkPoint {
+                            longitude: shape_point.longitude as f32,
+                            latitude: shape_point.latitude as f32,
+                        });
+                    }
+                    shape
+                } else {
+                    Vec::new()
+                };
+                routes.push(Route {
+                    line: Rc::from(line_name.as_str()),
+                    num_stops: first_trip.stop_times.len() as StopIndex,
+                    num_trips: route_trips.len() as TripIndex,
+                    route_stops_idx: route_stops.len(),
+                    stop_times_idx: stop_times.len(),
+                    colour,
+                    shape: shape.into_boxed_slice(),
+                    shape_height: height,
+                });
+
+                // Because of how routes are constructed, all trips in a route have the same stops.
+                // So grab the stops from the first trip.
+                for stop_time in first_trip.stop_times.iter() {
+                    route_stops.push(stop_index[stop_time.stop.id.as_str()]);
                 }
-                shape
-            } else {
-                Vec::new()
-            };
-            routes.push(Route {
-                line: Rc::from(line_name.as_str()),
-                num_stops: first_trip.stop_times.len() as StopIndex,
-                num_trips: route_trips.len() as TripIndex,
-                route_stops_idx: route_stops.len(),
-                stop_times_idx: stop_times.len(),
-                colour,
-                shape: shape.into_boxed_slice(),
-                shape_height: height,
-            });
 
-            // Because of how routes are constructed, all trips in a route have the same stops.
-            // So grab the stops from the first trip.
-            for stop_time in first_trip.stop_times.iter() {
-                route_stops.push(stop_index[stop_time.stop.id.as_str()]);
-            }
+                num_trips += route_trips.len() as TripIndex;
 
-            num_trips += route_trips.len() as TripIndex;
-            
-            for trip in route_trips {
-                for stop_time in trip.stop_times.iter() {
-                    stop_times.push(StopTime {
-                        arrival_time: stop_time.arrival_time.unwrap(),
-                        departure_time: stop_time.departure_time.unwrap(),
-                    });
+                for trip in route_trips {
+                    for stop_time in trip.stop_times.iter() {
+                        stop_times.push(StopTime {
+                            arrival_time: stop_time.arrival_time.unwrap(),
+                            departure_time: stop_time.departure_time.unwrap(),
+                        });
+                    }
                 }
             }
         }
@@ -324,7 +363,7 @@ impl Network {
         let mut stop_points = Vec::with_capacity(stops.len());
         for stop_id in gtfs.stops.keys() {
             let stop = &gtfs.stops[stop_id];
-            stop_points.push(NetworkPoint { longitude: stop.longitude.unwrap() as f32, latitude: stop.latitude.unwrap() as f32 });
+            stop_points.push(NetworkPoint { longitude: stop.longitude.unwrap_or(0.) as f32, latitude: stop.latitude.unwrap_or(0.) as f32 });
         }
 
         let transfer_times = vec![default_transfer_time; stops.len()];
@@ -341,6 +380,7 @@ impl Network {
             connections: Vec::new(), // These will be built later if required.
             transfer_times,
             date: journey_date,
+            has_shapes: gtfs.shapes.len() > 0,
         }
     }
 
