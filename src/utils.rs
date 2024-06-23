@@ -4,11 +4,11 @@ use gtfs_structures::{Gtfs, Trip};
 use crate::network::Timestamp;
 
 pub trait OptionExt<T> {
-    fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool;
+    fn is_none_or<F: FnOnce(T) -> bool>(self, f: F) -> bool;
 }
 
 impl<T> OptionExt<T> for Option<T> {
-    fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool {
+    fn is_none_or<F: FnOnce(T) -> bool>(self, f: F) -> bool {
         self.map(f).unwrap_or(true)
     }
 }

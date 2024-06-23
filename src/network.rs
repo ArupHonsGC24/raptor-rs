@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 use chrono::NaiveDate;
 use gtfs_structures::{DirectionType, Gtfs, Trip};
 use rgb::RGB8;
@@ -15,6 +15,7 @@ const STOP_BITFIELD_SIZE_BITS: usize = utils::get_size_bits::<StopBitfield>();
 
 pub type RouteIndex = u16;
 pub type TripIndex = u32;
+pub type PathfindingCost = f32;
 
 #[derive(Clone, Copy)]
 pub struct NetworkPoint {
@@ -102,7 +103,7 @@ impl NetworkPoint {
 }
 
 pub struct Route {
-    pub line: Rc<str>,
+    pub line: Arc<str>,
     pub num_stops: StopIndex,
     pub num_trips: TripIndex,
     pub route_stops_idx: usize,
@@ -198,24 +199,35 @@ impl Network {
             stops.push(Stop::new(value.name.as_ref().unwrap(), id));
         }
 
-        // Construct route-local stop indices. TODO: Use struct instead of tuple.
-        let mut route_stop_indices = HashMap::<&str, (StopIndex, Vec<Option<StopIndex>>, Vec<&Trip>)>::new();
+        // Construct route-local stop indices.
+        struct RouteStopIndices<'a> {
+            num_stops: StopIndex,
+            mapping: Vec<Option<StopIndex>>,
+            trips: Vec<&'a Trip>,
+        }
+        impl RouteStopIndices<'_> {
+            fn default(len: usize) -> Self {
+                Self { num_stops: 0, mapping: vec![None; len], trips: Vec::new() }
+            }
+        }
+
+        let mut route_stop_indices = HashMap::<&str, RouteStopIndices>::new();
 
         for trip in gtfs.trips.values() {
             if !utils::does_trip_run(&gtfs, &trip, journey_date) {
                 continue;
             }
 
-            let route = route_stop_indices.entry(trip.route_id.as_str()).or_insert((0, vec![None; stops.len()], Vec::new()));
+            let route = route_stop_indices.entry(trip.route_id.as_str()).or_insert(RouteStopIndices::default(stops.len()));
 
             // Group trips by GTFS route.
-            route.2.push(trip);
+            route.trips.push(trip);
 
             for stop_time in trip.stop_times.iter() {
-                let stop_idx = &mut route.1[stop_index[stop_time.stop.id.as_str()] as usize];
+                let stop_idx = &mut route.mapping[stop_index[stop_time.stop.id.as_str()] as usize];
                 if stop_idx.is_none() {
-                    *stop_idx = Some(route.0);
-                    route.0 += 1;
+                    *stop_idx = Some(route.num_stops);
+                    route.num_stops += 1;
                 }
             }
         }
@@ -225,10 +237,22 @@ impl Network {
         let mut route_maps = Vec::new();
 
         let mut num_routes = 0;
-        for (&route_id, (num_stops, mapping, trips)) in route_stop_indices.iter() {
+        for (&route_id, RouteStopIndices { num_stops, mapping, trips }) in route_stop_indices.iter() {
             // Check that there aren't too many stops in a route.
             let num_stops = *num_stops as usize;
-            assert!(num_stops < STOP_BITFIELD_SIZE_BITS - 1, "Too many stops in route {route_id} ({}, max {}).", num_stops, STOP_BITFIELD_SIZE_BITS - 1);
+            if num_stops == 0 {
+                continue;
+            }
+            if num_stops >= STOP_BITFIELD_SIZE_BITS {
+                eprintln!("Too many stops in route {route_id} ({}, max {}).", num_stops, STOP_BITFIELD_SIZE_BITS - 1);
+                for (stop_idx, mapped_stop) in mapping.iter().enumerate() {
+                    if mapped_stop.is_some() {
+                        eprintln!("Stop: {}", stops[stop_idx].name);
+                    }
+                }
+                assert!(false, "Too many stops in route {route_id} ({}, max {}).", num_stops, STOP_BITFIELD_SIZE_BITS - 1);
+                continue;
+            }
 
             let mut route_map = HashMap::new();
             for &trip in trips.iter() {
@@ -246,14 +270,6 @@ impl Network {
             num_routes += route_map.len();
             route_maps.push(route_map);
         }
-
-        // Check that grouped trips don't span gtfs routes
-        //for route_trips in routes_map.values() {
-        //    let first_route_id = route_trips[0].route_id.as_str();
-        //    for trip in route_trips {
-        //        assert_eq!(first_route_id, trip.route_id.as_str(), "Trips in a route must have the same route ID.");
-        //    }
-        //}
 
         assert!(
             num_routes < RouteIndex::MAX as usize,
@@ -314,7 +330,7 @@ impl Network {
                     Vec::new()
                 };
                 routes.push(Route {
-                    line: Rc::from(line_name.as_str()),
+                    line: Arc::from(line_name.as_str()),
                     num_stops: first_trip.stop_times.len() as StopIndex,
                     num_trips: route_trips.len() as TripIndex,
                     route_stops_idx: route_stops.len(),

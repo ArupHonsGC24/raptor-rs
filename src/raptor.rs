@@ -1,11 +1,11 @@
 use crate::Journey;
 use crate::journey::{Boarding, TauEntry};
-use crate::network::{Network, RouteIndex, StopIndex, Timestamp, TripIndex};
+use crate::network::{Network, PathfindingCost, RouteIndex, StopIndex, Timestamp, TripIndex};
 use crate::utils::{self, OptionExt};
 
 const K: usize = 8;
 
-pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, end: StopIndex) -> Journey {
+pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, end: StopIndex, _costs: &[PathfindingCost]) -> Journey<'a> {
     let start = start as usize;
     let end = end as usize;
     let num_stops = network.stops.len();
@@ -84,8 +84,6 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
                     0
                 };
 
-                let current_tau = tau[stop_idx][k - 1].saturating_add(transfer_time);
-
                 // Can the arrival time at this stop be improved in this round?
                 let mut current_departure_time = None;
                 if let Some(boarding) = &boarding {
@@ -105,6 +103,7 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
                 // 2. This is a subsequent stop in the trip, where another route has reached it faster. Similarly, it has already been updated to the fastest time.
 
                 // Can we catch an earlier trip at this stop?
+                let current_tau = tau[stop_idx][k - 1].saturating_add(transfer_time);
                 if current_departure_time
                     .is_none_or(|departure_time| current_tau <= departure_time)
                 {
