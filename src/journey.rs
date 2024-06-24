@@ -132,7 +132,7 @@ impl Display for Journey<'_> {
                 writeln!(f,
                          "Arrive at {} at {}.",
                          //leg.arrival_stop_name,
-                         utils::get_short_stop_name(&self.network.get_stop(leg.arrival_stop as usize).name),
+                         &self.network.get_stop(leg.arrival_stop as usize).name,
                          utils::get_time_str(leg.arrival_time)
                 )?;
             }

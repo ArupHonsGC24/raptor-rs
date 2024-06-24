@@ -109,6 +109,7 @@ pub struct Route {
     pub route_stops_idx: usize,
     pub stop_times_idx: usize,
     // Visual properties
+    pub trip_ids: Vec<Box<str>>,
     pub colour: RGB8,
     pub shape: Box<[NetworkPoint]>,
     pub shape_height: f32,
@@ -196,7 +197,7 @@ impl Network {
         let mut stops = Vec::with_capacity(gtfs.stops.len());
         for (i, (id, value)) in gtfs.stops.iter().enumerate() {
             stop_index.insert(id.clone(), i as StopIndex);
-            stops.push(Stop::new(value.name.as_ref().unwrap(), id));
+            stops.push(Stop::new(utils::get_short_stop_name(value.name.as_ref().unwrap()), id));
         }
 
         // Construct route-local stop indices.
@@ -335,6 +336,7 @@ impl Network {
                     num_trips: route_trips.len() as TripIndex,
                     route_stops_idx: route_stops.len(),
                     stop_times_idx: stop_times.len(),
+                    trip_ids: route_trips.iter().map(|trip| trip.id.clone().into_boxed_str()).collect(),
                     colour,
                     shape: shape.into_boxed_slice(),
                     shape_height: height,
