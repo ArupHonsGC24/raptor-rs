@@ -401,13 +401,11 @@ impl Network {
     }
 
     pub fn set_transfer_time_for_stop(&mut self, stop_id: &str, transfer_time: Timestamp) {
-        assert!(self.connections.is_empty(), "Transfer times must be set before building connections.");
-
         let stop_idx = self.get_stop_idx(stop_id) as usize;
         self.transfer_times[stop_idx] = transfer_time;
     }
 
-    // Call build connections if running a CSA query. Should be called after all transfer times are set.
+    // Call build connections if running a CSA query. 
     pub fn build_connections(&mut self) {
         // Construct list of connections from trips in network.
         let mut connections = Vec::new();

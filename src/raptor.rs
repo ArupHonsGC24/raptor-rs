@@ -3,6 +3,7 @@ use crate::journey::{Boarding, TauEntry};
 use crate::network::{Network, PathfindingCost, RouteIndex, StopIndex, Timestamp, TripIndex};
 use crate::utils::{self, OptionExt};
 
+// Number of rounds to run RAPTOR for.
 const K: usize = 8;
 
 pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, end: StopIndex, _costs: &[PathfindingCost]) -> Journey<'a> {
@@ -77,13 +78,6 @@ pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Time
             {
                 let stop_idx = stop_idx as usize;
 
-                // Ignore transfer time for first round.
-                let transfer_time = if k > 1 {
-                    network.transfer_times[stop_idx]
-                } else {
-                    0
-                };
-
                 // Can the arrival time at this stop be improved in this round?
                 let mut current_departure_time = None;
                 if let Some(boarding) = &boarding {
@@ -101,6 +95,13 @@ pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Time
                 // Because there are two cases where we update the current trip:
                 // 1. This is the first stop in the trip. The stop was therefore set by the previous round.
                 // 2. This is a subsequent stop in the trip, where another route has reached it faster. Similarly, it has already been updated to the fastest time.
+
+                // Ignore transfer time for first round.
+                let transfer_time = if k > 1 {
+                    network.transfer_times[stop_idx]
+                } else {
+                    0
+                };
 
                 // Can we catch an earlier trip at this stop?
                 let current_tau = tau[stop_idx][k - 1].saturating_add(transfer_time);
@@ -155,6 +156,6 @@ pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Time
             break;
         }
     }
-    
+
     Journey::from_tau(&tau_star, network, start as StopIndex, end as StopIndex)
 }
