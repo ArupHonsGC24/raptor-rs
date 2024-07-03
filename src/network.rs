@@ -2,18 +2,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use chrono::NaiveDate;
 use gtfs_structures::{DirectionType, Gtfs, Trip};
+use kdam::TqdmIterator;
 use rgb::RGB8;
 use crate::journey::Connection;
 use crate::utils;
 
 // Timestamp is seconds since midnight.
 pub type Timestamp = u32;
-pub type StopIndex = u16;
-pub type StopBitfield = bnum::BUint<7>; // Maximum 64*7 = 448 stops per route. This is required for the 901 bus route in Melbourne.
+pub type StopIndex = u32;
+pub type StopBitfield = bnum::BUint<30>; // Maximum 64*7 = 448 stops per route. This is required for the 901 bus route in Melbourne?
 
 const STOP_BITFIELD_SIZE_BITS: usize = utils::get_size_bits::<StopBitfield>();
 
-pub type RouteIndex = u16;
+pub type RouteIndex = u32;
 pub type TripIndex = u32;
 pub type PathfindingCost = f32;
 
@@ -214,7 +215,7 @@ impl Network {
 
         let mut route_stop_indices = HashMap::<&str, RouteStopIndices>::new();
 
-        for trip in gtfs.trips.values() {
+        for trip in gtfs.trips.values().tqdm() {
             if !utils::does_trip_run(&gtfs, &trip, journey_date) {
                 continue;
             }
@@ -238,7 +239,7 @@ impl Network {
         let mut route_maps = Vec::new();
 
         let mut num_routes = 0;
-        for (&route_id, RouteStopIndices { num_stops, mapping, trips }) in route_stop_indices.iter() {
+        for (&route_id, RouteStopIndices { num_stops, mapping, trips }) in route_stop_indices.iter().tqdm() {
             // Check that there aren't too many stops in a route.
             let num_stops = *num_stops as usize;
             if num_stops == 0 {
@@ -293,7 +294,7 @@ impl Network {
         let mut colour_to_height_map = HashMap::new();
         let mut last_height = 0f32;
 
-        for route_map in route_maps.iter_mut() {
+        for route_map in route_maps.iter_mut().tqdm() {
             for route_trips in route_map.values_mut() {
                 let first_trip = match route_trips.get(0) {
                     Some(&first_trip) => first_trip,
@@ -304,7 +305,7 @@ impl Network {
                 route_trips.sort_unstable_by_key(|x| { x.stop_times[0].arrival_time });
 
                 let first_route = &gtfs.routes[first_trip.route_id.as_str()];
-                let line_name = first_route.short_name.as_ref().unwrap();
+                let line_name = first_route.short_name.as_ref().unwrap_or(first_route.long_name.as_ref().unwrap_or(&first_trip.route_id));
 
                 // Determine height based on colour. TODO: Hardcode heights for colours for consistency.
                 let colour = first_route.color;
@@ -318,15 +319,19 @@ impl Network {
 
                 // Extract shape.
                 let shape = if gtfs.shapes.len() > 0 {
-                    let shapes = &gtfs.shapes[first_trip.shape_id.as_ref().unwrap().as_str()];
-                    let mut shape = Vec::with_capacity(shapes.len());
-                    for shape_point in shapes.iter() {
-                        shape.push(NetworkPoint {
-                            longitude: shape_point.longitude as f32,
-                            latitude: shape_point.latitude as f32,
-                        });
+                    if let Some(shape_id) = first_trip.shape_id.as_ref() {
+                        let shapes = &gtfs.shapes[shape_id.as_str()];
+                        let mut shape = Vec::with_capacity(shapes.len());
+                        for shape_point in shapes.iter() {
+                            shape.push(NetworkPoint {
+                                longitude: shape_point.longitude as f32,
+                                latitude: shape_point.latitude as f32,
+                            });
+                        }
+                        shape
+                    } else {
+                        Vec::new()
                     }
-                    shape
                 } else {
                     Vec::new()
                 };
@@ -362,17 +367,18 @@ impl Network {
         }
 
         // Index the routes for a given stop.
-        let mut stop_routes = Vec::new();
-        for (stop_idx, stop) in stops.iter_mut().enumerate() {
-            stop.routes_idx = stop_routes.len();
+        let mut stop_routes_map = vec![Vec::new(); stops.len()];
+        for (route_idx, route) in routes.iter().enumerate().tqdm() {
+            for &stop in route.get_stops(&route_stops) {
+                stop_routes_map[stop as usize].push(route_idx as RouteIndex);
+            }
+        }
 
-            for (route_idx, route) in routes.iter().enumerate() {
-                if route
-                    .get_stops(&route_stops)
-                    .contains(&(stop_idx as StopIndex))
-                {
-                    stop_routes.push(route_idx as RouteIndex);
-                }
+        let mut stop_routes = Vec::new();
+        for (stop_idx, stop) in stops.iter_mut().enumerate().tqdm() {
+            stop.routes_idx = stop_routes.len();
+            for &route_idx in stop_routes_map[stop_idx].iter() {
+                stop_routes.push(route_idx);
             }
             stop.num_routes = stop_routes.len() - stop.routes_idx;
         }
@@ -482,6 +488,10 @@ impl Network {
     pub fn get_trip(&self, route_idx: usize, trip_idx: usize) -> &[StopTime] {
         let route = &self.routes[route_idx];
         route.get_trip(trip_idx, &self.stop_times)
+    }
+
+    pub fn print_stats(&self) {
+        println!("Network has {} stops, {} routes, {} trips and {} connections.", self.stops.len(), self.routes.len(), self.num_trips, self.connections.len());
     }
 }
 

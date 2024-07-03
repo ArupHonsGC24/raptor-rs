@@ -23,24 +23,22 @@ pub fn get_stop_from_user(network: &Network, prompt: &str) -> Result<StopIndex, 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gtfs = GtfsReader::default().read_shapes(false).read("../gtfs/2/google_transit.zip")?;
+    //let gtfs = GtfsReader::default().read_shapes(false).read("../gtfs/4/google_transit.zip")?;
+    //let gtfs = GtfsReader::default().read_shapes(false).read("../gtfs_processing/tube-gtfs.zip")?;
+    //let gtfs = GtfsReader::default().read_shapes(false).read("../gtfs_processing/tokyo_trains.zip")?;
 
     // GTFS optional fields that are unwrapped: stop.name, trip.direction_id, stop_time.arrival_time, stop_time.departure_time.
-    println!(
-        "GTFS loaded with {} stops, {} routes, and {} trips.",
-        gtfs.stops.len(),
-        gtfs.routes.len(),
-        gtfs.trips.len()
-    );
+    gtfs.print_stats();
     println!();
 
     // Get user input for query.
     let journey_date = loop {
         // Default to 2024.
-        // let mut date_str = String::from("2024/");
+        let mut date_str = String::from("2024/");
         print!("When are you travelling (in 2024)? (DD/MM): ");
-        //stdout().flush()?;
-        //std::io::stdin().read_line(&mut date_str)?;
-        let date_str = String::from("2024/10/5");
+        stdout().flush()?;
+        std::io::stdin().read_line(&mut date_str)?;
+        //let date_str = String::from("2024/10/6");
         match NaiveDate::parse_from_str(date_str.trim(), "%Y/%d/%m") {
             Ok(parsed_date) => break parsed_date,
             Err(e) => {
@@ -54,12 +52,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_transfer_time = 3 * 60;
     let mut network = Network::new(&gtfs, journey_date, default_transfer_time);
     // Hardcode extra time at Flinders Street Station.
-    network.set_transfer_time_for_stop("19854", 4 * 60);
+    //network.set_transfer_time_for_stop("19854", 4 * 60);
     network.build_connections();
+    network.print_stats();
 
     loop {
-        //let start = get_stop_from_user(&network, "starting")?;
-        let start = network.get_stop_idx_from_name("cheltenham").unwrap();
+        let start = get_stop_from_user(&network, "starting")?;
+        //let start = network.get_stop_idx_from_name("cheltenham").unwrap();
         let start_time = loop {
             //let mut time_str = String::new();
             print!("What time are you starting? (HH:MM): ");
@@ -76,8 +75,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         };
-        //let end = get_stop_from_user(&network, "going")?;
-        let end = network.get_stop_idx_from_name("greensborough").unwrap();
+        let end = get_stop_from_user(&network, "going")?;
+        //let end = network.get_stop_idx_from_name("greensborough").unwrap();
         
         println!();
         println!(

@@ -79,16 +79,23 @@ impl<'a> Journey<'a> {
         // Reconstruct trip from parent pointers
         let mut legs = Vec::new();
         let mut current_stop_opt = Some(end);
+        const MAX_LEGS: usize = 100; // Prevent infinite loop (TODO: which is a bug).
+        let mut num_legs = 0;
         while let Some(current_stop) = current_stop_opt {
             if current_stop == start {
                 break;
+            }
+            num_legs += 1;
+            if num_legs > MAX_LEGS {
+                eprintln!("Infinite loop in journey reconstruction.");
+                return Journey::from(Vec::new(), network);
             }
             let current_tau = &tau[current_stop as usize];
 
             if let Some(boarded_leg) = &current_tau.boarding {
                 // Find arrival stop order.
                 let route = &network.routes[boarded_leg.route_idx as usize];
-                let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().find_map(|(i, &stop)| {
+                let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().skip(boarded_leg.boarded_stop_order as usize).find_map(|(i, &stop)| {
                     if stop == current_stop {
                         Some(i as StopIndex)
                     } else {

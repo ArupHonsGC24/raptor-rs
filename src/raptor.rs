@@ -128,8 +128,8 @@ pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Time
                                     .departure_time,
                             )
                         })
-                        .take_while(|&(_, departure_time)| {
-                            current_tau <= departure_time
+                        .take_while(|(_, departure_time)| {
+                            current_tau <= *departure_time
                         })
                         .last();
 
