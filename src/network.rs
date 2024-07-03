@@ -18,25 +18,27 @@ pub type RouteIndex = u32;
 pub type TripIndex = u32;
 pub type PathfindingCost = f32;
 
+pub type CoordType = f32;
+
 #[derive(Clone, Copy)]
 pub struct NetworkPoint {
-    pub latitude: f32,
-    pub longitude: f32,
+    pub latitude: CoordType,
+    pub longitude: CoordType,
 }
 
 impl NetworkPoint {
-    const EARTH_RADIUS: f32 = 6371.; // km
-    const CLOSE_THRESHOLD: f32 = 0.1; // 0.1 km = 100 m, because shaped points sometimes aren't exactly on station points. Closest stations are 504 m apart (West and North Richmond).
+    const EARTH_RADIUS: CoordType = 6371.; // km
+    const CLOSE_THRESHOLD: CoordType = 0.1; // 0.1 km = 100 m, because shaped points sometimes aren't exactly on station points. Closest stations are 504 m apart (West and North Richmond).
 
     // Equirectangular projection (on a unit sphere).
-    pub fn equirectangular_delta(self, other: NetworkPoint) -> (f32, f32) {
+    pub fn equirectangular_delta(self, other: NetworkPoint) -> (CoordType, CoordType) {
         let x = (other.longitude - self.longitude).to_radians() * ((other.latitude + self.latitude) * 0.5).to_radians().cos();
         let y = (other.latitude - self.latitude).to_radians();
         (x * Self::EARTH_RADIUS, y * Self::EARTH_RADIUS)
     }
 
     // Distance is returned in km.
-    pub fn distance(self, other: NetworkPoint) -> f32 {
+    pub fn distance(self, other: NetworkPoint) -> CoordType {
         // Equirectangular projection works for small distances.
         let (x, y) = self.equirectangular_delta(other);
         return (x * x + y * y).sqrt();
@@ -60,7 +62,7 @@ impl NetworkPoint {
     // Used to offset shape based on the direction of the trip, so that inbound and outbound trips are drawn on opposite sides of the track.
     // Offset is given in metres.
     #[allow(dead_code)]
-    pub fn left_offset(&self, next_point: NetworkPoint, offset: f32) -> NetworkPoint {
+    pub fn left_offset(&self, next_point: NetworkPoint, offset: CoordType) -> NetworkPoint {
         let lat1_rad = self.latitude.to_radians();
         let lon1_rad = self.longitude.to_radians();
         let lat2_rad = next_point.latitude.to_radians();
@@ -76,7 +78,7 @@ impl NetworkPoint {
         let x = lat1_cos * lat2_sin - lat1_sin * lat2_cos * delta_long_cos;
 
         // Find bearing, and rotate anticlockwise by 90 degrees.
-        let bearing = y.atan2(x) - 90f32.to_radians();
+        let bearing = y.atan2(x) - (90 as CoordType).to_radians();
         let (bearing_sin, bearing_cos) = bearing.sin_cos();
 
         let offset_rad = offset * 0.001 / Self::EARTH_RADIUS;
@@ -113,7 +115,7 @@ pub struct Route {
     pub trip_ids: Vec<Box<str>>,
     pub colour: RGB8,
     pub shape: Box<[NetworkPoint]>,
-    pub shape_height: f32,
+    pub shape_height: CoordType,
 }
 
 impl Route {
@@ -292,7 +294,7 @@ impl Network {
 
         // Keep track of the height of each colour.
         let mut colour_to_height_map = HashMap::new();
-        let mut last_height = 0f32;
+        let mut last_height = 0. as CoordType;
 
         for route_map in route_maps.iter_mut().tqdm() {
             for route_trips in route_map.values_mut() {
@@ -324,8 +326,8 @@ impl Network {
                         let mut shape = Vec::with_capacity(shapes.len());
                         for shape_point in shapes.iter() {
                             shape.push(NetworkPoint {
-                                longitude: shape_point.longitude as f32,
-                                latitude: shape_point.latitude as f32,
+                                longitude: shape_point.longitude as CoordType,
+                                latitude: shape_point.latitude as CoordType,
                             });
                         }
                         shape
@@ -387,7 +389,7 @@ impl Network {
         let mut stop_points = Vec::with_capacity(stops.len());
         for stop_id in gtfs.stops.keys() {
             let stop = &gtfs.stops[stop_id];
-            stop_points.push(NetworkPoint { longitude: stop.longitude.unwrap_or(0.) as f32, latitude: stop.latitude.unwrap_or(0.) as f32 });
+            stop_points.push(NetworkPoint { longitude: stop.longitude.unwrap_or(0.) as CoordType, latitude: stop.latitude.unwrap_or(0.) as CoordType });
         }
 
         let transfer_times = vec![default_transfer_time; stops.len()];
