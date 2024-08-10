@@ -122,13 +122,26 @@ impl Route {
     pub fn get_stops<'a>(&self, route_stops: &'a [StopIndex]) -> &'a [StopIndex] {
         &route_stops[self.route_stops_idx..(self.route_stops_idx + self.num_stops as usize)]
     }
-    pub fn get_trip_range(&self, trip: usize) -> std::ops::Range<usize> {
-        let start = self.stop_times_idx + trip * self.num_stops as usize;
+    pub fn iter_stops<'a>(&self, earliest_stop_order: usize, route_stops: &'a [StopIndex]) -> impl Iterator<Item=(usize, usize)> + 'a {
+        self.get_stops(route_stops)
+            .iter()
+            .map(|&stop| stop as usize)
+            .enumerate()
+            .skip(earliest_stop_order)
+    }
+    pub fn get_trip_range(&self, trip_order: usize) -> std::ops::Range<usize> {
+        let start = self.stop_times_idx + trip_order * self.num_stops as usize;
         let end = start + self.num_stops as usize;
         start..end
     }
-    pub fn get_trip<'a>(&self, trip: usize, stop_times: &'a [StopTime]) -> &'a [StopTime] {
-        &stop_times[self.get_trip_range(trip)]
+    pub fn get_index_in_trip(&self, trip_order: usize, stop_order: usize) -> usize {
+        let trip_range = self.get_trip_range(trip_order);
+        let index = trip_range.start + stop_order;
+        debug_assert!(trip_range.contains(&index));
+        index
+    }
+    pub fn get_trip<'a>(&self, trip_order: usize, stop_times: &'a [StopTime]) -> &'a [StopTime] {
+        &stop_times[self.get_trip_range(trip_order)]
     }
 }
 
@@ -431,7 +444,7 @@ impl Network {
                     let departure_stop_order = arrival_stop_order - 1;
                     connections.push(Connection {
                         unique_trip_idx,
-                        trip_idx,
+                        trip_order: trip_idx,
                         route_idx,
                         departure_idx: stops[departure_stop_order],
                         departure_stop_order: departure_stop_order as StopIndex,

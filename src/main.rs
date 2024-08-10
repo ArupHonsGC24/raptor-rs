@@ -3,10 +3,8 @@ use std::io::{stdout, Write};
 use chrono::NaiveDate;
 use gtfs_structures::GtfsReader;
 
-// A bit unorthodox, perhaps, but it lets me make a binary and a library without duplication.
-include!("lib.rs");
-
-use network::StopIndex;
+use raptor::{csa_query, raptor_query, utils, Journey, Network};
+use raptor::network::StopIndex;
 
 pub fn get_stop_from_user(network: &Network, prompt: &str) -> Result<StopIndex, std::io::Error> {
     loop {
@@ -33,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get user input for query.
     let journey_date = loop {
-        // Default to 2024.
+        // Hardcode year to 2024.
         let mut date_str = String::from("2024/");
         print!("When are you travelling (in 2024)? (DD/MM): ");
         stdout().flush()?;
@@ -58,13 +56,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         let start = get_stop_from_user(&network, "starting")?;
-        //let start = network.get_stop_idx_from_name("cheltenham").unwrap();
         let start_time = loop {
-            //let mut time_str = String::new();
+            let mut time_str = String::new();
             print!("What time are you starting? (HH:MM): ");
             stdout().flush()?;
-            //std::io::stdin().read_line(&mut time_str)?;
-            let time_str = String::from("08:30");
+            std::io::stdin().read_line(&mut time_str)?;
             // Remove trailing whitespace and append seconds so it can be parsed.
             let mut time_str = String::from(time_str.trim_end());
             time_str += ":00";
@@ -76,8 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
         let end = get_stop_from_user(&network, "going")?;
-        //let end = network.get_stop_idx_from_name("greensborough").unwrap();
-        
+
         println!();
         println!(
             "Start: {} at time {}",
@@ -87,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("End: {}", network.get_stop(end as usize).name);
         println!();
 
-        let mut journey = Journey::from(Vec::new(), &network);
+        let mut journey = Journey::empty(&network);
         let query_start = std::time::Instant::now();
         for _ in 0..10 {
             journey = raptor_query(&network, start, start_time, end, &[0.]);
@@ -102,9 +97,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("CSA:");
         println!("Query took {:?}", query_start.elapsed() / 10);
         println!("{journey}");
-        
+
         break;
     }
-    
+
     Ok(())
 }

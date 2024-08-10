@@ -7,10 +7,6 @@ edition = "2021"
 name = "raptor"
 path = "src/lib.rs"
 
-[[bin]]
-name = "raptor-run"
-path = "src/main.rs"
-
 # Open Street Map import osm4routing2
 
 [dependencies]
@@ -19,3 +15,5 @@ bnum = { version = "0.11.0", default-features = false }
 gtfs-structures =  { version = "0.41.2", default-features = false }
 rgb = { version = "0.8.37", default-features = false }
 kdam = "0.5.2"
+#bump-scope = "0.5.7"
+#allocator-api2 = "0.2.18"

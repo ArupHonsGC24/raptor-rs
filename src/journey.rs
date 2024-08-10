@@ -1,10 +1,10 @@
-use std::fmt::Display;
-use crate::{Network, utils};
 use crate::network::{RouteIndex, StopIndex, Timestamp, TripIndex};
+use crate::{utils, Network};
+use std::fmt::Display;
 
 pub struct Connection {
     pub unique_trip_idx: TripIndex, // Unique across the network.
-    pub trip_idx: TripIndex, // Index of the trip in the route.
+    pub trip_order: TripIndex, // Index of the trip in the route.
     pub route_idx: RouteIndex,
     pub departure_idx: StopIndex,
     pub departure_stop_order: StopIndex,
@@ -14,12 +14,12 @@ pub struct Connection {
 }
 
 #[derive(Clone)]
-pub struct Boarding {
+pub(crate) struct Boarding {
     pub boarded_stop: StopIndex,
     pub boarded_stop_order: StopIndex,
     pub boarded_time: Timestamp,
     pub route_idx: RouteIndex,
-    pub trip_idx: TripIndex,
+    pub trip_order: TripIndex,
 }
 
 impl Boarding {
@@ -29,13 +29,13 @@ impl Boarding {
             boarded_stop_order: connection.departure_stop_order,
             boarded_time: connection.departure_time,
             route_idx: connection.route_idx,
-            trip_idx: connection.trip_idx,
+            trip_order: connection.trip_order,
         }
     }
 }
 
 #[derive(Clone)]
-pub struct TauEntry {
+pub(crate) struct TauEntry {
     pub time: Timestamp,
     pub boarding: Option<Boarding>,
 }
@@ -49,6 +49,21 @@ impl Default for TauEntry {
     }
 }
 
+//#[derive(Clone)]
+//pub(crate) struct TauEntryMC {
+//    pub bag: Bag,
+//    pub boarding: Option<Boarding>,
+//}
+//
+//impl Default for TauEntryMC {
+//    fn default() -> Self {
+//        Self {
+//            bag: Bag::new(),
+//            boarding: None,
+//        }
+//    }
+//}
+
 pub struct Leg {
     pub boarded_stop: StopIndex,
     pub boarded_stop_order: StopIndex,
@@ -57,7 +72,7 @@ pub struct Leg {
     pub arrival_stop_order: StopIndex,
     pub arrival_time: Timestamp,
     pub route_idx: RouteIndex,
-    pub trip_idx: TripIndex,
+    pub trip_order: TripIndex,
 }
 
 pub struct Journey<'a> {
@@ -66,11 +81,15 @@ pub struct Journey<'a> {
 }
 
 impl<'a> Journey<'a> {
-    pub fn from(legs: Vec<Leg>, network: &'a Network) -> Self {
-        Self { legs, network }
+    pub fn empty(network: &'a Network) -> Self {
+        Self { legs: Vec::new(), network }
     }
     
-    pub fn from_tau(tau: &[TauEntry], network: &'a Network, start: StopIndex, end: StopIndex) -> Self {
+    pub(crate) fn from(legs: Vec<Leg>, network: &'a Network) -> Self {
+        Self { legs, network }
+    }
+
+    pub(crate) fn from_tau(tau: &[TauEntry], network: &'a Network, start: StopIndex, end: StopIndex) -> Self {
         // No journey found.
         if tau[end as usize].boarding.is_none() {
             return Journey::from(Vec::new(), network);
@@ -111,7 +130,7 @@ impl<'a> Journey<'a> {
                     arrival_stop_order,
                     arrival_time: current_tau.time,
                     route_idx: boarded_leg.route_idx,
-                    trip_idx: boarded_leg.trip_idx,
+                    trip_order: boarded_leg.trip_order,
                 });
             }
             current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop);

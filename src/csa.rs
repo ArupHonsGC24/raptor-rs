@@ -54,7 +54,7 @@ pub fn csa_query<'a>(network: &'a Network, start: StopIndex, start_time: Timesta
 
             if let Some(boarding) = tau[departure_idx].boarding.clone() {
                 // If travelling along the same trip, use the same boarding.
-                if boarding.trip_idx == connection.trip_idx && boarding.route_idx == connection.route_idx {
+                if boarding.trip_order == connection.trip_order && boarding.route_idx == connection.route_idx {
                     tau[arrival_idx].boarding = Some(boarding);
                 } else {
                     tau[arrival_idx].boarding = Some(Boarding::from(connection));
