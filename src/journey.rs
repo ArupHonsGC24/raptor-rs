@@ -1,6 +1,7 @@
 use crate::network::{RouteIndex, StopIndex, Timestamp, TripIndex};
 use crate::{utils, Network};
 use std::fmt::Display;
+use crate::multicriteria::Bag;
 
 pub struct Connection {
     pub unique_trip_idx: TripIndex, // Unique across the network.
@@ -49,21 +50,6 @@ impl Default for TauEntry {
     }
 }
 
-//#[derive(Clone)]
-//pub(crate) struct TauEntryMC {
-//    pub bag: Bag,
-//    pub boarding: Option<Boarding>,
-//}
-//
-//impl Default for TauEntryMC {
-//    fn default() -> Self {
-//        Self {
-//            bag: Bag::new(),
-//            boarding: None,
-//        }
-//    }
-//}
-
 pub struct Leg {
     pub boarded_stop: StopIndex,
     pub boarded_stop_order: StopIndex,
@@ -84,14 +70,14 @@ impl<'a> Journey<'a> {
     pub fn empty(network: &'a Network) -> Self {
         Self { legs: Vec::new(), network }
     }
-    
+
     fn from(legs: Vec<Leg>, network: &'a Network) -> Self {
         Self { legs, network }
     }
 
-    pub(crate) fn from_tau(tau: &[TauEntry], network: &'a Network, start: StopIndex, end: StopIndex) -> Self {
+    pub(crate) fn from_tau(tau: &[TauEntry], network: &'a Network, start: usize, end: usize) -> Self {
         // No journey found.
-        if tau[end as usize].boarding.is_none() {
+        if tau[end].boarding.is_none() {
             return Journey::from(Vec::new(), network);
         }
 
@@ -107,15 +93,15 @@ impl<'a> Journey<'a> {
             num_legs += 1;
             if num_legs > MAX_LEGS {
                 eprintln!("Infinite loop in journey reconstruction.");
-                return Journey::empty( network);
+                return Journey::empty(network);
             }
-            let current_tau = &tau[current_stop as usize];
+            let current_tau = &tau[current_stop];
 
             if let Some(boarded_leg) = &current_tau.boarding {
                 // Find arrival stop order.
                 let route = &network.routes[boarded_leg.route_idx as usize];
                 let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().skip(boarded_leg.boarded_stop_order as usize).find_map(|(i, &stop)| {
-                    if stop == current_stop {
+                    if stop as usize == current_stop {
                         Some(i as StopIndex)
                     } else {
                         None
@@ -126,18 +112,57 @@ impl<'a> Journey<'a> {
                     boarded_stop: boarded_leg.boarded_stop,
                     boarded_stop_order: boarded_leg.boarded_stop_order,
                     boarded_time: boarded_leg.boarded_time,
-                    arrival_stop: current_stop,
+                    arrival_stop: current_stop as StopIndex,
                     arrival_stop_order,
                     arrival_time: current_tau.time,
                     route_idx: boarded_leg.route_idx,
                     trip_order: boarded_leg.trip_order,
                 });
             }
-            current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop);
+            current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop as usize);
         }
 
         legs.reverse();
 
+        Journey::from(legs, network)
+    }
+
+    pub(crate) fn from_tau_bag(tau: &[Bag], network: &'a Network, start: usize, end: usize) -> Self {
+        let mut legs = Vec::new();
+        let mut current_stop_opt = Some(end);
+        while let Some(current_stop) = current_stop_opt {
+            if current_stop == start {
+                break;
+            }
+            // MVP implementation: just take the first label.
+            if let Some(current_tau) = tau[current_stop].labels.get(0) {
+                if let Some(boarded_leg) = &current_tau.boarding {
+                    // Find arrival stop order.
+                    let route = &network.routes[boarded_leg.route_idx as usize];
+                    let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().skip(boarded_leg.boarded_stop_order as usize).find_map(|(i, &stop)| {
+                        if stop as usize == current_stop {
+                            Some(i as StopIndex)
+                        } else {
+                            None
+                        }
+                    }).expect("Arrival stop not found in route.");
+
+                    legs.push(Leg {
+                        boarded_stop: boarded_leg.boarded_stop,
+                        boarded_stop_order: boarded_leg.boarded_stop_order,
+                        boarded_time: boarded_leg.boarded_time,
+                        arrival_stop: current_stop as StopIndex,
+                        arrival_stop_order,
+                        arrival_time: current_tau.arrival_time,
+                        route_idx: boarded_leg.route_idx,
+                        trip_order: boarded_leg.trip_order,
+                    });
+                }
+                current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop as usize);
+            }
+        }
+
+        legs.reverse();
         Journey::from(legs, network)
     }
 }

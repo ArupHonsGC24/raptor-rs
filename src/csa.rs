@@ -72,7 +72,7 @@ pub fn csa_query(network: &Network, start: StopIndex, start_time: Timestamp, end
         }
     }
 
-    Journey::from_tau(&tau, network, start as StopIndex, end as StopIndex)
+    Journey::from_tau(&tau, network, start, end)
 }
 
 pub fn mc_csa_query<'a>(network: &'a Network, _start: StopIndex, _start_time: Timestamp, _end: StopIndex, _costs: &[PathfindingCost]) -> Journey<'a> {

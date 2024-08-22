@@ -234,12 +234,21 @@ impl Bag {
         self.labels.push(new_label);
         true
     }
-    
-    pub(crate) fn merge(&mut self, other_bag: &Bag) -> bool {
-        let mut updated = false;
-        for label in &other_bag.labels {
-            updated |= self.add(label.clone());
+
+    pub(crate) fn dominates(&self, other_label: &Label) -> bool {
+        for label in &self.labels {
+            if label.dominates(other_label) {
+                return true;
+            }
         }
-        updated
+        false
     }
+    
+    // pub(crate) fn merge(&mut self, other_bag: &Bag) -> bool {
+    //     let mut updated = false;
+    //     for label in &other_bag.labels {
+    //         updated |= self.add(label.clone());
+    //     }
+    //     updated
+    // }
 }

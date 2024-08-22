@@ -176,23 +176,23 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
         }
     }
 
-    Journey::from_tau(&tau_star, network, start as StopIndex, end as StopIndex)
+    Journey::from_tau(&tau_star, network, start, end)
 }
 
-pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, _end: StopIndex, costs: &[PathfindingCost]) -> Journey<'a> {
+pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, end: StopIndex, costs: &[PathfindingCost]) -> Journey<'a> {
     let start = start as usize;
-    // let end = end as usize; // TODO: Target pruning.
+    let end = end as usize;
     let num_stops = network.stops.len();
 
     // τ[p][i] = earliest known arrival time at stop p with up to i trips.
     let mut tau = vec![[const { Bag::new() }; K]; num_stops];
     // τ*[p] = earliest known arrival time at stop p.
-    //let mut tau_star = vec![TauEntryMC::default(); num_stops]; // TODO: Local pruning.
+    let mut tau_star = vec![Bag::new(); num_stops];
 
     // Set initial departure time from start station.
     let start_label = Label { arrival_time: start_time, cost: 0 as PathfindingCost, boarding: None };
     tau[start][0].add(start_label.clone());
-    //tau_star[start].bag.add(&start_label);
+    tau_star[start].add(start_label);
 
     // Array for recording which stops have been marked in the current round.
     let mut marked_stops = MarkedStops::new(network);
@@ -228,7 +228,15 @@ pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: T
                 }
 
                 // Multicriteria step 2: Merge B_r into B_k.
-                if tau[stop_idx][k].merge(&route_bag) {
+                // TODO: Only have boarding data in route bag.
+                let mut updated = false;
+                for label in &route_bag.labels {
+                    if !tau_star[stop_idx].dominates(label) && !tau_star[end].dominates(label) {
+                        updated |= tau[stop_idx][k].add(label.clone());
+                        updated |= tau_star[stop_idx].add(label.clone());
+                    }
+                }
+                if updated {
                     marked_stops.mark_stop(stop_idx);
                 }
 
@@ -278,6 +286,5 @@ pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: T
         }
     }
 
-    //Journey::from_tau(&tau_star, network, start as StopIndex, end as StopIndex)
-    Journey::empty(network)
+    Journey::from_tau_bag(&tau_star, network, start, end)
 }
