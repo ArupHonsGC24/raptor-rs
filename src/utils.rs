@@ -14,7 +14,7 @@ impl<T> OptionExt<T> for Option<T> {
 }
 
 pub const fn const_unwrap<T: Copy>(x: Option<T>) -> T {
-    if let Some(x) = x { x } else { panic!("") }
+    if let Some(x) = x { x } else { panic!("Failed to const unwrap.") }
 }
 
 // A fast way to check a buffer is all zeros (https://stackoverflow.com/questions/65367552/how-to-efficiently-check-a-vecu8-to-see-if-its-all-zeros).

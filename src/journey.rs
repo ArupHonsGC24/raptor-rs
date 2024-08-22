@@ -85,7 +85,7 @@ impl<'a> Journey<'a> {
         Self { legs: Vec::new(), network }
     }
     
-    pub(crate) fn from(legs: Vec<Leg>, network: &'a Network) -> Self {
+    fn from(legs: Vec<Leg>, network: &'a Network) -> Self {
         Self { legs, network }
     }
 
@@ -107,7 +107,7 @@ impl<'a> Journey<'a> {
             num_legs += 1;
             if num_legs > MAX_LEGS {
                 eprintln!("Infinite loop in journey reconstruction.");
-                return Journey::from(Vec::new(), network);
+                return Journey::empty( network);
             }
             let current_tau = &tau[current_stop as usize];
 

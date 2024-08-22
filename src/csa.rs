@@ -3,9 +3,9 @@ use crate::journey::{Boarding, TauEntry};
 use crate::network::{PathfindingCost, StopIndex, Timestamp};
 
 // Run a connection scanning algorithm (CSA) query on the network.
-pub fn csa_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, end: StopIndex, _costs: &[PathfindingCost]) -> Journey<'a> {
+pub fn csa_query(network: &Network, start: StopIndex, start_time: Timestamp, end: StopIndex) -> Journey {
     if start == end {
-        return Journey::from(vec![], network);
+        return Journey::empty(network);
     }
 
     // Require connections be built
@@ -73,4 +73,8 @@ pub fn csa_query<'a>(network: &'a Network, start: StopIndex, start_time: Timesta
     }
 
     Journey::from_tau(&tau, network, start as StopIndex, end as StopIndex)
+}
+
+pub fn mc_csa_query<'a>(network: &'a Network, _start: StopIndex, _start_time: Timestamp, _end: StopIndex, _costs: &[PathfindingCost]) -> Journey<'a> {
+    Journey::empty(network)
 }

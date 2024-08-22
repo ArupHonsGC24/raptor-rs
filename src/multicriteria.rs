@@ -218,28 +218,28 @@ impl Bag {
 
     // Adds a label to the bag, discarding non-dominated labels. 
     // Returns true if the label was added <=> the bag was modified.
-    pub(crate) fn add(&mut self, new_label: &Label) -> bool {
+    pub(crate) fn add(&mut self, new_label: Label) -> bool {
         // Remove dominated labels.
         let num_labels = self.labels.len();
         self.labels.retain(|label| !new_label.dominates(label));
         
         // Check if the new label is dominated by any existing label
-        if self.labels.iter().any(|label| label.dominates(new_label)) {
+        if self.labels.iter().any(|label| label.dominates(&new_label)) {
             // If this label is dominated by any existing label, it won't have dominated any existing labels.
             debug_assert!(self.labels.len() == num_labels);
             return false;
         }
 
         // Add the new label
-        self.labels.push(new_label.clone());
+        self.labels.push(new_label);
         true
     }
     
-    //pub(crate) fn merge(&mut self, other_bag: &Bag) -> bool {
-    //    let mut updated = false;
-    //    for label in &other_bag.labels {
-    //        updated |= self.add(label);
-    //    }
-    //    updated
-    //}
+    pub(crate) fn merge(&mut self, other_bag: &Bag) -> bool {
+        let mut updated = false;
+        for label in &other_bag.labels {
+            updated |= self.add(label.clone());
+        }
+        updated
+    }
 }

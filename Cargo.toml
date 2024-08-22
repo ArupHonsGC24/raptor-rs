@@ -17,3 +17,6 @@ rgb = { version = "0.8.37", default-features = false }
 kdam = "0.5.2"
 #bump-scope = "0.5.7"
 #allocator-api2 = "0.2.18"
+
+[dev-dependencies]
+fastrand = "2.1.0"

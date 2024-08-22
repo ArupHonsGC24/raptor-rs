@@ -201,6 +201,8 @@ pub struct Network {
 
 impl Network {
     pub fn new(gtfs: &Gtfs, journey_date: NaiveDate, default_transfer_time: Timestamp) -> Self {
+        // GTFS optional fields that are unwrapped: stop.name, trip.direction_id, stop_time.arrival_time, stop_time.departure_time.
+
         // We use one stop index as the direction of the trip when grouping as routes.
         assert!(
             gtfs.stops.len() < (StopIndex::MAX - 1) as usize,

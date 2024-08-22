@@ -37,6 +37,7 @@ impl MarkedStops {
                 let earliest_stop_in_route_order =
                     earliest_stop_for_route[route_idx].unwrap_or(route.num_stops as usize);
 
+                // TODO: profile to test if stop orders in a route for stop indices should be cached.
                 for (stop_order, &route_stop) in
                     route.get_stops(&network.route_stops).iter().enumerate()
                 {
@@ -66,7 +67,10 @@ impl MarkedStops {
 }
 
 // Compute et(r, p).
-fn earliest_trip(network: &Network, route: &Route, route_idx: RouteIndex, stop_idx: StopIndex, stop_order: StopIndex, tau: Timestamp, boarding: &mut Option<Boarding>) {
+// Returns the earliest trip boardable from the given stop on the given route before the given time as well as its departure time at the given stop.
+fn earliest_trip(network: &Network, route: &Route, stop_order: usize, time: Timestamp, boarding: Option<&Boarding>) -> Option<(usize, Timestamp)> {
+    // This is the trip we are currently on.
+    // An exclusive range is used below, so we don't scan the current trip and to scan all trips we use num_trips as the default.
     let current_trip_order = match boarding {
         Some(boarding) => boarding.trip_order,
         None => route.num_trips,
@@ -80,30 +84,18 @@ fn earliest_trip(network: &Network, route: &Route, route_idx: RouteIndex, stop_i
             // We want to save the departure time of the trip we select.
             (
                 trip_order,
-                network.stop_times[route.get_index_in_trip(trip_order, stop_order as usize)].departure_time,
+                network.stop_times[route.get_index_in_trip(trip_order, stop_order)].departure_time,
             )
         })
         .take_while(|(_, departure_time)| {
-            tau <= *departure_time
+            time <= *departure_time
         })
         .last();
 
-    // If no new trip was found, we continue with the current trip.
-    // If a new trip was found, we update the trip and the stop we boarded it.
-    if let Some((found_trip_order, departure_time)) = found_trip_order {
-        *boarding = Some(
-            Boarding {
-                boarded_stop: stop_idx,
-                boarded_stop_order: stop_order,
-                boarded_time: departure_time,
-                route_idx,
-                trip_order: found_trip_order as TripIndex,
-            },
-        );
-    };
+    found_trip_order
 }
 
-pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, end: StopIndex, _costs: &[PathfindingCost]) -> Journey<'a> {
+pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, end: StopIndex) -> Journey {
     let start = start as usize;
     let end = end as usize;
     let num_stops = network.stops.len();
@@ -162,8 +154,19 @@ pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Time
                 if current_departure_time
                     .is_none_or(|departure_time| current_tau <= departure_time)
                 {
-                    // Compute et(r, p).
-                    earliest_trip(network, route, route_idx as RouteIndex, stop_idx as StopIndex, stop_order as StopIndex, current_tau, &mut boarding);
+                    // If no new trip was found, we continue with the current trip.
+                    // If a new trip was found, we update the trip and the stop we boarded it.
+                    if let Some((found_trip_order, departure_time)) = earliest_trip(network, route, stop_order, current_tau, boarding.as_ref()) {
+                        boarding = Some(
+                            Boarding {
+                                boarded_stop: stop_idx as StopIndex,
+                                boarded_stop_order: stop_order as StopIndex,
+                                boarded_time: departure_time,
+                                route_idx: route_idx as RouteIndex,
+                                trip_order: found_trip_order as TripIndex,
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -176,7 +179,7 @@ pub fn raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Time
     Journey::from_tau(&tau_star, network, start as StopIndex, end as StopIndex)
 }
 
-pub fn raptor_query_mc<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, _end: StopIndex, costs: &[PathfindingCost]) -> Journey<'a> {
+pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, _end: StopIndex, costs: &[PathfindingCost]) -> Journey<'a> {
     let start = start as usize;
     // let end = end as usize; // TODO: Target pruning.
     let num_stops = network.stops.len();
@@ -188,7 +191,7 @@ pub fn raptor_query_mc<'a>(network: &'a Network, start: StopIndex, start_time: T
 
     // Set initial departure time from start station.
     let start_label = Label { arrival_time: start_time, cost: 0 as PathfindingCost, boarding: None };
-    tau[start][0].add(&start_label);
+    tau[start][0].add(start_label.clone());
     //tau_star[start].bag.add(&start_label);
 
     // Array for recording which stops have been marked in the current round.
@@ -202,6 +205,7 @@ pub fn raptor_query_mc<'a>(network: &'a Network, start: StopIndex, start_time: T
         {
             let route = &network.routes[route_idx];
 
+            // B_r
             let mut route_bag = Bag::new();
 
             // This keeps track of when and where we got on the current trip.
@@ -211,8 +215,10 @@ pub fn raptor_query_mc<'a>(network: &'a Network, start: StopIndex, start_time: T
                 {
                     let mut new_bag = Bag::new();
                     for label in route_bag.labels.iter() {
-                        let index = route.get_index_in_trip(label.boarding.as_ref().unwrap().trip_order as usize, stop_order);
-                        new_bag.add(&Label {
+                        let boarding = label.boarding.as_ref().unwrap();
+                        assert_eq!(boarding.route_idx, route_idx as RouteIndex);
+                        let index = route.get_index_in_trip(boarding.trip_order as usize, stop_order);
+                        new_bag.add(Label {
                             arrival_time: network.stop_times[index].arrival_time,
                             cost: label.cost + costs[index],
                             boarding: label.boarding.clone(),
@@ -222,23 +228,13 @@ pub fn raptor_query_mc<'a>(network: &'a Network, start: StopIndex, start_time: T
                 }
 
                 // Multicriteria step 2: Merge B_r into B_k.
-                let mut stop_updated = false;
-                for label in route_bag.labels.iter() {
-                    stop_updated |= tau[stop_idx][k].add(label);
-                }
-                if stop_updated {
+                if tau[stop_idx][k].merge(&route_bag) {
                     marked_stops.mark_stop(stop_idx);
                 }
 
                 // Multicriteria step 3: Merge B_{k-1} into B_r and assign trips.
                 for label in tau[stop_idx][k - 1].labels.iter() {
-                    //let mut new_label = label.clone();
-                    //new_label.boarding = Some(boarding.as_ref().unwrap().clone());
-                    route_bag.add(label);
-                }
-
-                for label in route_bag.labels.iter_mut() {
-                    // NOTE: Why is this after the code to update this stop? 
+                    // NOTE: Why is this after the code to update this stop?
                     // Because there are two cases where we update the current trip:
                     // 1. This is the first stop in the trip. The stop was therefore set by the previous round.
                     // 2. This is a subsequent stop in the trip, where another route has reached it faster. Similarly, it has already been updated to the fastest time.
@@ -252,7 +248,27 @@ pub fn raptor_query_mc<'a>(network: &'a Network, start: StopIndex, start_time: T
 
                     // Can we catch an earlier trip at this stop?
                     let current_tau = label.arrival_time.saturating_add(transfer_time);
-                    earliest_trip(network, route, route_idx as RouteIndex, stop_idx as StopIndex, stop_order as StopIndex, current_tau, &mut label.boarding);
+                    // TODO: Is there a way to use the existing boarding to optimise the earliest trip calculation? (Currently, the label sometimes has the wrong route.)
+                    // if let Some(boarding) = label.boarding.as_ref() {
+                    //     assert_eq!(boarding.route_idx, route_idx as RouteIndex);
+                    // }
+                    if let Some((found_trip_order, departure_time)) = earliest_trip(network, route, stop_order, current_tau, None/*label.boarding.as_ref()*/) {
+                        let new_label = Label {
+                            arrival_time: label.arrival_time,
+                            cost: label.cost,
+                            boarding: Some(
+                                Boarding {
+                                    boarded_stop: stop_idx as StopIndex,
+                                    boarded_stop_order: stop_order as StopIndex,
+                                    boarded_time: departure_time,
+                                    route_idx: route_idx as RouteIndex,
+                                    trip_order: found_trip_order as TripIndex,
+                                },
+                            ),
+                        };
+
+                        route_bag.add(new_label);
+                    }
                 }
             }
         }
@@ -263,5 +279,5 @@ pub fn raptor_query_mc<'a>(network: &'a Network, start: StopIndex, start_time: T
     }
 
     //Journey::from_tau(&tau_star, network, start as StopIndex, end as StopIndex)
-    Journey::from(Vec::new(), network)
+    Journey::empty(network)
 }
