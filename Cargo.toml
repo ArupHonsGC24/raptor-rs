@@ -7,12 +7,16 @@ edition = "2021"
 name = "raptor"
 path = "src/lib.rs"
 
+[[bench]]
+name = "benchmark"
+harness = false
+
 # Open Street Map import osm4routing2
 
 [dependencies]
 chrono = { version = "0.4.37", default-features = false }
 bnum = { version = "0.11.0", default-features = false }
-gtfs-structures =  { version = "0.41.2", default-features = false }
+gtfs-structures =  { version = "0.41", default-features = false }
 rgb = { version = "0.8.37", default-features = false }
 kdam = "0.5.2"
 #bump-scope = "0.5.7"
@@ -20,3 +24,5 @@ kdam = "0.5.2"
 
 [dev-dependencies]
 fastrand = "2.1.0"
+criterion = { version = "0.5", features = ["html_reports"] }
+dev_utils = { path = "dev_utils" }

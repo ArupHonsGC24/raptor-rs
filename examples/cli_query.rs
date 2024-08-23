@@ -5,8 +5,7 @@ use chrono::NaiveDate;
 use raptor::{csa_query, raptor_query, utils, Journey, Network};
 use raptor::network::StopIndex;
 
-mod common;
-use common::load_example_gtfs;
+use dev_utils::load_example_gtfs;
 
 pub fn get_stop_from_user(network: &Network, prompt: &str) -> Result<StopIndex, std::io::Error> {
     loop {

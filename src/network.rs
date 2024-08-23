@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use chrono::NaiveDate;
 use gtfs_structures::{DirectionType, Gtfs, Trip};
-use kdam::TqdmIterator;
 use rgb::RGB8;
 use crate::journey::Connection;
 use crate::utils;
@@ -232,7 +231,7 @@ impl Network {
 
         let mut route_stop_indices = HashMap::<&str, RouteStopIndices>::new();
 
-        for trip in gtfs.trips.values().tqdm() {
+        for trip in gtfs.trips.values() {
             if !utils::does_trip_run(&gtfs, &trip, journey_date) {
                 continue;
             }
@@ -256,7 +255,7 @@ impl Network {
         let mut route_maps = Vec::new();
 
         let mut num_routes = 0;
-        for (&route_id, RouteStopIndices { num_stops, mapping, trips }) in route_stop_indices.iter().tqdm() {
+        for (&route_id, RouteStopIndices { num_stops, mapping, trips }) in route_stop_indices.iter() {
             // Check that there aren't too many stops in a route.
             let num_stops = *num_stops as usize;
             if num_stops == 0 {
@@ -311,7 +310,7 @@ impl Network {
         let mut colour_to_height_map = HashMap::new();
         let mut last_height = 0. as CoordType;
 
-        for route_map in route_maps.iter_mut().tqdm() {
+        for route_map in route_maps.iter_mut() {
             for route_trips in route_map.values_mut() {
                 let first_trip = match route_trips.get(0) {
                     Some(&first_trip) => first_trip,
@@ -385,14 +384,14 @@ impl Network {
 
         // Index the routes for a given stop.
         let mut stop_routes_map = vec![Vec::new(); stops.len()];
-        for (route_idx, route) in routes.iter().enumerate().tqdm() {
+        for (route_idx, route) in routes.iter().enumerate() {
             for &stop in route.get_stops(&route_stops) {
                 stop_routes_map[stop as usize].push(route_idx as RouteIndex);
             }
         }
 
         let mut stop_routes = Vec::new();
-        for (stop_idx, stop) in stops.iter_mut().enumerate().tqdm() {
+        for (stop_idx, stop) in stops.iter_mut().enumerate() {
             stop.routes_idx = stop_routes.len();
             for &route_idx in stop_routes_map[stop_idx].iter() {
                 stop_routes.push(route_idx);
