@@ -1,3 +1,4 @@
+use std::iter::repeat_with;
 use raptor::network::PathfindingCost;
 use raptor::mc_raptor_query;
 
@@ -8,12 +9,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     network.print_stats();
 
     // Random pathfinding costs.
-    let mut costs = vec![0 as PathfindingCost; network.stop_times.len()];
-    for cost in costs.iter_mut() {
-        *cost = fastrand::f32() as PathfindingCost;
-    }
-
-    let journey = mc_raptor_query(&network, start, start_time, end, &costs);
+    fastrand::seed(7);
+    let costs: Vec<_> = repeat_with(|| fastrand::f32() as PathfindingCost).take(network.stop_times.len()).collect();
+    let path_preferences = raptor::journey::JourneyPreferences::default();
+    let journey = mc_raptor_query(&network, start, start_time, end, &costs, &path_preferences);
 
     println!("{journey}");
 

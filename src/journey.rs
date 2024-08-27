@@ -1,7 +1,7 @@
-use crate::network::{RouteIndex, StopIndex, Timestamp, TripIndex};
+use crate::network::{PathfindingCost, RouteIndex, StopIndex, Timestamp, TripIndex};
 use crate::{utils, Network};
 use std::fmt::Display;
-use crate::multicriteria::Bag;
+use crate::multicriteria::{Bag, Label};
 
 pub struct Connection {
     pub unique_trip_idx: TripIndex, // Unique across the network.
@@ -59,6 +59,25 @@ pub struct Leg {
     pub arrival_time: Timestamp,
     pub route_idx: RouteIndex,
     pub trip_order: TripIndex,
+}
+
+// Journey preferences for a multi-criteria journey query.
+pub struct JourneyPreferences {
+    // Will choose the journey with the shortest travel time.
+    pub utility_function: fn(&Label) -> PathfindingCost,
+}
+
+impl Default for JourneyPreferences {
+    fn default() -> Self {
+        // By default, ignore cost and only consider travel time.
+        JourneyPreferences { utility_function: |label| label.arrival_time as PathfindingCost }
+    }
+}
+
+impl JourneyPreferences {
+    pub(crate) fn best_label<'a>(&self, labels: &'a [Label]) -> Option<&'a Label> {
+        labels.iter().min_by(|a,b| f32::total_cmp(&(self.utility_function)(a), &(self.utility_function)(b)))
+    }
 }
 
 pub struct Journey<'a> {
@@ -127,15 +146,14 @@ impl<'a> Journey<'a> {
         Journey::from(legs, network)
     }
 
-    pub(crate) fn from_tau_bag(tau: &[Bag], network: &'a Network, start: usize, end: usize) -> Self {
+    pub(crate) fn from_tau_bag(tau: &[Bag], network: &'a Network, start: usize, end: usize, path_preferences: &JourneyPreferences) -> Self {
         let mut legs = Vec::new();
         let mut current_stop_opt = Some(end);
         while let Some(current_stop) = current_stop_opt {
             if current_stop == start {
                 break;
             }
-            // MVP implementation: just take the first label.
-            if let Some(current_tau) = tau[current_stop].labels.get(0) {
+            if let Some(current_tau) = path_preferences.best_label(&tau[current_stop].labels) {
                 if let Some(boarded_leg) = &current_tau.boarding {
                     // Find arrival stop order.
                     let route = &network.routes[boarded_leg.route_idx as usize];

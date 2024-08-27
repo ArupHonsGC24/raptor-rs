@@ -27,4 +27,4 @@ arrayvec = { version = "^0.7.6", default-features = false }
 [dev-dependencies]
 fastrand = "^2.1.0"
 criterion = { version = "^0.5", features = ["html_reports"] }
-dev_utils = { path = "dev_utils" }
+dev_utils = { path = "./dev_utils" }

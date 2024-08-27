@@ -1,4 +1,4 @@
-use crate::journey::{Boarding, TauEntry};
+use crate::journey::{Boarding, JourneyPreferences, TauEntry};
 use crate::multicriteria::{Bag, Label};
 use crate::network::{Network, PathfindingCost, Route, RouteIndex, StopIndex, Timestamp, TripIndex};
 use crate::utils::{self, OptionExt};
@@ -179,7 +179,7 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
     Journey::from_tau(&tau_star, network, start, end)
 }
 
-pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, end: StopIndex, costs: &[PathfindingCost]) -> Journey<'a> {
+pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, end: StopIndex, costs: &[PathfindingCost], path_preferences: &JourneyPreferences) -> Journey<'a> {
     let start = start as usize;
     let end = end as usize;
     let num_stops = network.stops.len();
@@ -286,5 +286,5 @@ pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: T
         }
     }
 
-    Journey::from_tau_bag(&tau_star, network, start, end)
+    Journey::from_tau_bag(&tau_star, network, start, end, path_preferences)
 }

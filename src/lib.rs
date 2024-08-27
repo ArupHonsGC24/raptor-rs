@@ -15,4 +15,4 @@ pub mod csa;
 pub use csa::{csa_query, mc_csa_query};
 
 pub mod utils;
-mod multicriteria;
+pub(crate) mod multicriteria;
