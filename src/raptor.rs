@@ -190,7 +190,7 @@ pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: T
     let mut tau_star = vec![Bag::new(); num_stops];
 
     // Set initial departure time from start station.
-    let start_label = Label { arrival_time: start_time, cost: 0 as PathfindingCost, boarding: None };
+    let start_label = Label::new(start_time, 0.);
     tau[start][0].add(start_label.clone());
     tau_star[start].add(start_label);
 

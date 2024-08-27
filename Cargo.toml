@@ -5,24 +5,26 @@ edition = "2021"
 
 [lib]
 name = "raptor"
-path = "src/lib.rs"
 
 [[bench]]
-name = "benchmark"
+name = "raptor"
 harness = false
 
-# Open Street Map import osm4routing2
+[[bench]]
+name = "mcraptor"
+harness = false
 
 [dependencies]
-chrono = { version = "0.4.37", default-features = false }
-bnum = { version = "0.11.0", default-features = false }
-gtfs-structures =  { version = "0.41", default-features = false }
-rgb = { version = "0.8.37", default-features = false }
-kdam = "0.5.2"
-#bump-scope = "0.5.7"
-#allocator-api2 = "0.2.18"
+chrono = { version = "^0.4.37", default-features = false }
+bnum = { version = "^0.11.0", default-features = false }
+gtfs-structures =  { version = "^0.41", default-features = false }
+rgb = { version = "^0.8.37", default-features = false }
+# kdam = "^0.5.2"
+arrayvec = { version = "^0.7.6", default-features = false }
+#bump-scope = "^0.5.7"
+#allocator-api2 = "^0.2.18"
 
 [dev-dependencies]
-fastrand = "2.1.0"
-criterion = { version = "0.5", features = ["html_reports"] }
+fastrand = "^2.1.0"
+criterion = { version = "^0.5", features = ["html_reports"] }
 dev_utils = { path = "dev_utils" }
