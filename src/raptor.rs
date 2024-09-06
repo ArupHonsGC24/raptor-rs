@@ -151,8 +151,7 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
 
                 // Can we catch an earlier trip at this stop?
                 let current_tau = tau[stop_idx][k - 1].saturating_add(transfer_time);
-                if current_departure_time
-                    .is_none_or(|departure_time| current_tau <= departure_time)
+                if OptionExt::is_none_or(current_departure_time, |departure_time| current_tau <= departure_time)
                 {
                     // If no new trip was found, we continue with the current trip.
                     // If a new trip was found, we update the trip and the stop we boarded it.

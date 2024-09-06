@@ -3,6 +3,7 @@ use gtfs_structures::{Gtfs, Trip};
 
 use crate::network::Timestamp;
 
+// NOTE: This will be in the standard library in 1.82.
 pub trait OptionExt<T> {
     fn is_none_or<F: FnOnce(T) -> bool>(self, f: F) -> bool;
 }
