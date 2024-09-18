@@ -1,12 +1,11 @@
-use crate::network::{PathfindingCost, RouteIndex, StopIndex, Timestamp, TripIndex};
+use crate::multicriteria::{Bag, Label};
+use crate::network::{GlobalTripIndex, PathfindingCost, StopIndex, Timestamp, TripOrder};
 use crate::{utils, Network};
 use std::fmt::Display;
-use crate::multicriteria::{Bag, Label};
 
 pub struct Connection {
-    pub unique_trip_idx: TripIndex, // Unique across the network.
-    pub trip_order: TripIndex, // Index of the trip in the route.
-    pub route_idx: RouteIndex,
+    pub sequential_trip_idx: TripOrder, // Used to index a global trip array (for csa).
+    pub trip: GlobalTripIndex, // Used to lookup trip data in the network.
     pub departure_idx: StopIndex,
     pub departure_stop_order: StopIndex,
     pub departure_time: Timestamp,
@@ -19,8 +18,7 @@ pub(crate) struct Boarding {
     pub boarded_stop: StopIndex,
     pub boarded_stop_order: StopIndex,
     pub boarded_time: Timestamp,
-    pub route_idx: RouteIndex,
-    pub trip_order: TripIndex,
+    pub trip: GlobalTripIndex,
 }
 
 impl Boarding {
@@ -29,8 +27,7 @@ impl Boarding {
             boarded_stop: connection.departure_idx,
             boarded_stop_order: connection.departure_stop_order,
             boarded_time: connection.departure_time,
-            route_idx: connection.route_idx,
-            trip_order: connection.trip_order,
+            trip: connection.trip,
         }
     }
 }
@@ -57,8 +54,7 @@ pub struct Leg {
     pub arrival_stop: StopIndex,
     pub arrival_stop_order: StopIndex,
     pub arrival_time: Timestamp,
-    pub route_idx: RouteIndex,
-    pub trip_order: TripIndex,
+    pub trip: GlobalTripIndex,
 }
 
 // Journey preferences for a multi-criteria journey query.
@@ -76,28 +72,33 @@ impl Default for JourneyPreferences {
 
 impl JourneyPreferences {
     pub(crate) fn best_label<'a>(&self, labels: &'a [Label]) -> Option<&'a Label> {
-        labels.iter().min_by(|a,b| f32::total_cmp(&(self.utility_function)(a), &(self.utility_function)(b)))
+        labels.iter().min_by(|a, b| f32::total_cmp(&(self.utility_function)(a), &(self.utility_function)(b)))
     }
 }
 
 pub struct Journey<'a> {
     pub legs: Vec<Leg>,
+    pub duration: Timestamp,
     pub network: &'a Network,
 }
 
 impl<'a> Journey<'a> {
     pub fn empty(network: &'a Network) -> Self {
-        Self { legs: Vec::new(), network }
+        Self { legs: Vec::new(), duration: 0, network }
     }
 
     fn from(legs: Vec<Leg>, network: &'a Network) -> Self {
-        Self { legs, network }
+        let duration = match (legs.first(), legs.last()) {
+            (Some(first), Some(last)) => last.arrival_time - first.boarded_time,
+            _ => 0,
+        };
+        Self { legs, duration, network }
     }
 
     pub(crate) fn from_tau(tau: &[TauEntry], network: &'a Network, start: usize, end: usize) -> Self {
         // No journey found.
         if tau[end].boarding.is_none() {
-            return Journey::from(Vec::new(), network);
+            return Journey::empty(network);
         }
 
         // Reconstruct trip from parent pointers
@@ -118,7 +119,7 @@ impl<'a> Journey<'a> {
 
             if let Some(boarded_leg) = &current_tau.boarding {
                 // Find arrival stop order.
-                let route = &network.routes[boarded_leg.route_idx as usize];
+                let route = &network.routes[boarded_leg.trip.route_idx as usize];
                 let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().skip(boarded_leg.boarded_stop_order as usize).find_map(|(i, &stop)| {
                     if stop as usize == current_stop {
                         Some(i as StopIndex)
@@ -134,8 +135,7 @@ impl<'a> Journey<'a> {
                     arrival_stop: current_stop as StopIndex,
                     arrival_stop_order,
                     arrival_time: current_tau.time,
-                    route_idx: boarded_leg.route_idx,
-                    trip_order: boarded_leg.trip_order,
+                    trip: boarded_leg.trip,
                 });
             }
             current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop as usize);
@@ -156,7 +156,7 @@ impl<'a> Journey<'a> {
             if let Some(current_tau) = path_preferences.best_label(&tau[current_stop].labels) {
                 if let Some(boarded_leg) = &current_tau.boarding {
                     // Find arrival stop order.
-                    let route = &network.routes[boarded_leg.route_idx as usize];
+                    let route = &network.routes[boarded_leg.trip.route_idx as usize];
                     let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().skip(boarded_leg.boarded_stop_order as usize).find_map(|(i, &stop)| {
                         if stop as usize == current_stop {
                             Some(i as StopIndex)
@@ -172,8 +172,7 @@ impl<'a> Journey<'a> {
                         arrival_stop: current_stop as StopIndex,
                         arrival_stop_order,
                         arrival_time: current_tau.arrival_time,
-                        route_idx: boarded_leg.route_idx,
-                        trip_order: boarded_leg.trip_order,
+                        trip: boarded_leg.trip,
                     });
                 }
                 current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop as usize);
@@ -196,7 +195,7 @@ impl Display for Journey<'_> {
                          //leg.boarded_stop_name,
                          utils::get_short_stop_name(&self.network.get_stop(leg.boarded_stop as usize).name),
                          utils::get_time_str(leg.boarded_time),
-                         self.network.routes[leg.route_idx as usize].line,
+                         self.network.routes[leg.trip.route_idx as usize].line,
                 )?;
                 writeln!(f,
                          "Arrive at {} at {}.",

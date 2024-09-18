@@ -29,7 +29,7 @@ pub fn csa_query(network: &Network, start: StopIndex, start_time: Timestamp, end
             break;
         }
 
-        let unique_trip_idx = connection.unique_trip_idx as usize;
+        let sequential_trip_idx = connection.sequential_trip_idx as usize;
         let departure_idx = connection.departure_idx as usize;
         let arrival_idx = connection.arrival_idx as usize;
 
@@ -39,14 +39,14 @@ pub fn csa_query(network: &Network, start: StopIndex, start_time: Timestamp, end
             network.transfer_times[arrival_idx]
         };
         
-        if !trip_reachable[unique_trip_idx] {
+        if !trip_reachable[sequential_trip_idx] {
             if tau[departure_idx].time.saturating_add(transfer_time) > connection.departure_time {
                 // Unreachable.
                 continue;
             }
 
             // Reachable.
-            trip_reachable[unique_trip_idx] = true;
+            trip_reachable[sequential_trip_idx] = true;
         }
 
         if connection.arrival_time < tau[arrival_idx].time {
@@ -54,7 +54,7 @@ pub fn csa_query(network: &Network, start: StopIndex, start_time: Timestamp, end
 
             if let Some(boarding) = tau[departure_idx].boarding.clone() {
                 // If travelling along the same trip, use the same boarding.
-                if boarding.trip_order == connection.trip_order && boarding.route_idx == connection.route_idx {
+                if boarding.trip == connection.trip {
                     tau[arrival_idx].boarding = Some(boarding);
                 } else {
                     tau[arrival_idx].boarding = Some(Boarding::from(connection));

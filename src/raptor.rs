@@ -1,6 +1,6 @@
 use crate::journey::{Boarding, JourneyPreferences, TauEntry};
 use crate::multicriteria::{Bag, Label};
-use crate::network::{Network, PathfindingCost, Route, RouteIndex, StopIndex, Timestamp, TripIndex};
+use crate::network::{GlobalTripIndex, Network, PathfindingCost, Route, RouteIndex, StopIndex, Timestamp, TripOrder};
 use crate::utils::{self, OptionExt};
 use crate::Journey;
 
@@ -57,8 +57,8 @@ impl MarkedStops {
         self.marked_stops.fill(false);
 
         earliest_stop_for_route.into_iter()
-            .enumerate()
-            .filter_map(|(i, stop)| stop.map(|s| (i, s)))
+                               .enumerate()
+                               .filter_map(|(i, stop)| stop.map(|s| (i, s)))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -72,7 +72,7 @@ fn earliest_trip(network: &Network, route: &Route, stop_order: usize, time: Time
     // This is the trip we are currently on.
     // An exclusive range is used below, so we don't scan the current trip and to scan all trips we use num_trips as the default.
     let current_trip_order = match boarding {
-        Some(boarding) => boarding.trip_order,
+        Some(boarding) => boarding.trip.trip_order,
         None => route.num_trips,
     } as usize;
 
@@ -127,7 +127,7 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
                 // Can the arrival time at this stop be improved in this round?
                 let mut current_departure_time = None;
                 if let Some(boarding) = &boarding {
-                    let trip = route.get_trip(boarding.trip_order as usize, &network.stop_times);
+                    let trip = route.get_trip(boarding.trip.trip_order as usize, &network.stop_times);
                     let arrival_time = trip[stop_order].arrival_time;
                     current_departure_time = Some(trip[stop_order].departure_time);
                     if arrival_time < tau_star[stop_idx].time.min(tau_star[end].time) {
@@ -161,8 +161,10 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
                                 boarded_stop: stop_idx as StopIndex,
                                 boarded_stop_order: stop_order as StopIndex,
                                 boarded_time: departure_time,
-                                route_idx: route_idx as RouteIndex,
-                                trip_order: found_trip_order as TripIndex,
+                                trip: GlobalTripIndex {
+                                    route_idx: route_idx as RouteIndex,
+                                    trip_order: found_trip_order as TripOrder
+                                },
                             },
                         )
                     }
@@ -215,8 +217,8 @@ pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: T
                     let mut new_bag = Bag::new();
                     for label in route_bag.labels.iter() {
                         let boarding = label.boarding.as_ref().unwrap();
-                        assert_eq!(boarding.route_idx, route_idx as RouteIndex);
-                        let index = route.get_index_in_trip(boarding.trip_order as usize, stop_order);
+                        assert_eq!(boarding.trip.route_idx, route_idx as RouteIndex);
+                        let index = route.get_index_in_trip(boarding.trip.trip_order as usize, stop_order);
                         new_bag.add(Label {
                             arrival_time: network.stop_times[index].arrival_time,
                             cost: label.cost + costs[index],
@@ -268,8 +270,10 @@ pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: T
                                     boarded_stop: stop_idx as StopIndex,
                                     boarded_stop_order: stop_order as StopIndex,
                                     boarded_time: departure_time,
-                                    route_idx: route_idx as RouteIndex,
-                                    trip_order: found_trip_order as TripIndex,
+                                    trip: GlobalTripIndex {
+                                        route_idx: route_idx as RouteIndex,
+                                        trip_order: found_trip_order as TripOrder
+                                    },
                                 },
                             ),
                         };

@@ -14,10 +14,17 @@ pub type StopBitfield = bnum::BUint<30>; // Maximum 64*7 = 448 stops per route. 
 const STOP_BITFIELD_SIZE_BITS: usize = utils::get_size_bits::<StopBitfield>();
 
 pub type RouteIndex = u32;
-pub type TripIndex = u32;
+pub type TripOrder = u32;
 pub type PathfindingCost = f32;
 
 pub type CoordType = f32;
+
+// Used to globally identify a trip in the network.
+#[derive(Clone, Copy, PartialEq)]
+pub struct GlobalTripIndex {
+    pub route_idx: RouteIndex,
+    pub trip_order: TripOrder,
+}
 
 #[derive(Clone, Copy)]
 pub struct NetworkPoint {
@@ -107,7 +114,7 @@ impl NetworkPoint {
 pub struct Route {
     pub line: Arc<str>,
     pub num_stops: StopIndex,
-    pub num_trips: TripIndex,
+    pub num_trips: TripOrder,
     pub route_stops_idx: usize,
     pub stop_times_idx: usize,
     // Visual properties
@@ -178,7 +185,7 @@ pub struct Network {
     // Metadata for stops in the network.
     pub stops: Vec<Stop>,
     // Number of trips. Not encoded anywhere else, like stops.len().
-    pub num_trips: TripIndex,
+    pub num_trips: TripOrder,
     // The stop index for a given stop ID.
     pub stop_index: HashMap<String, StopIndex>,
     // The stop times for each trip (Indexed by [route.stop_times_idx..(route.stop_times_idx + route.num_trips * route.num_stops)]).
@@ -295,16 +302,16 @@ impl Network {
             utils::get_size_bits::<RouteIndex>()
         );
         assert!(
-            gtfs.trips.len() < TripIndex::MAX as usize,
+            gtfs.trips.len() < TripOrder::MAX as usize,
             "Too many trips in GTFS (we currently use a {}-bit index for trips).",
-            utils::get_size_bits::<TripIndex>()
+            utils::get_size_bits::<TripOrder>()
         );
 
         // Construct routes, which point to a series of stops and stop times.
         let mut routes = Vec::new();
         let mut route_stops = Vec::new();
         let mut stop_times = Vec::new();
-        let mut num_trips = 0 as TripIndex;
+        let mut num_trips = 0 as TripOrder;
 
         // Keep track of the height of each colour.
         let mut colour_to_height_map = HashMap::new();
@@ -354,7 +361,7 @@ impl Network {
                 routes.push(Route {
                     line: Arc::from(line_name.as_str()),
                     num_stops: first_trip.stop_times.len() as StopIndex,
-                    num_trips: route_trips.len() as TripIndex,
+                    num_trips: route_trips.len() as TripOrder,
                     route_stops_idx: route_stops.len(),
                     stop_times_idx: stop_times.len(),
                     trip_ids: route_trips.iter().map(|trip| trip.id.clone().into_boxed_str()).collect(),
@@ -369,7 +376,7 @@ impl Network {
                     route_stops.push(stop_index[stop_time.stop.id.as_str()]);
                 }
 
-                num_trips += route_trips.len() as TripIndex;
+                num_trips += route_trips.len() as TripOrder;
 
                 for trip in route_trips {
                     for stop_time in trip.stop_times.iter() {
@@ -433,20 +440,22 @@ impl Network {
     pub fn build_connections(&mut self) {
         // Construct list of connections from trips in network.
         let mut connections = Vec::new();
-        let mut unique_trip_idx = 0 as TripIndex;
+        let mut sequential_trip_idx = 0 as TripOrder;
         for (route_idx, route) in self.routes.iter().enumerate() {
             let route_idx = route_idx as RouteIndex;
             let num_stops = route.num_stops as usize;
             let stops = route.get_stops(&self.route_stops);
-            for trip_idx in 0..route.num_trips as usize {
-                let trip = route.get_trip(trip_idx, &self.stop_times);
-                let trip_idx = trip_idx as TripIndex;
+            for trip_order in 0..route.num_trips as usize {
+                let trip = route.get_trip(trip_order, &self.stop_times);
+                let trip_order = trip_order as TripOrder;
                 for arrival_stop_order in 1..num_stops {
                     let departure_stop_order = arrival_stop_order - 1;
                     connections.push(Connection {
-                        unique_trip_idx,
-                        trip_order: trip_idx,
-                        route_idx,
+                        sequential_trip_idx,
+                        trip: GlobalTripIndex {
+                            route_idx,
+                            trip_order,
+                        },
                         departure_idx: stops[departure_stop_order],
                         departure_stop_order: departure_stop_order as StopIndex,
                         departure_time: trip[departure_stop_order].departure_time,
@@ -454,7 +463,7 @@ impl Network {
                         arrival_time: trip[arrival_stop_order].arrival_time,
                     });
                 }
-                unique_trip_idx += 1;
+                sequential_trip_idx += 1;
             }
         }
 
