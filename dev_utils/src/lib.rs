@@ -1,19 +1,66 @@
+use std::ffi::OsStr;
 use chrono::NaiveDate;
 use gtfs_structures::{Error, Gtfs, GtfsReader};
-use raptor::{utils, Network};
 use raptor::network::{StopIndex, Timestamp};
-
+use raptor::{utils, Network};
+use std::fs;
+use std::fs::{DirEntry, File};
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 // Common example data for the examples and benchmarks.
 
-pub fn load_example_gtfs() -> Result<Gtfs, Error> {
-    let current_dir = std::env::current_dir()?;
-    let gtfs_dir = if current_dir.ends_with("raptor-rs") {
-        "dev_utils/gtfs/melbourne.zip"
-    } else {
-        "raptor-rs/dev_utils/gtfs/melbourne.zip"
-    };
+// Returns if any file in the directory tree matches the condition.
+fn visit_dirs(dir: &Path, cb: &mut impl FnMut(&DirEntry) -> bool, ignore: &[&OsStr]) -> io::Result<bool> {
+    if dir.file_name().map(|s| ignore.contains(&s)).unwrap_or(false) {
+        return Ok(false);
+    }
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            if cb(&entry) {
+                return Ok(true);
+            }
+            let path = entry.path();
+            if path.is_dir() {
+                if visit_dirs(&path, cb, ignore)? {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
+}
 
-    GtfsReader::default().read_shapes(false).read(gtfs_dir)
+fn find_dev_utils_folder() -> Result<PathBuf, io::Error> {
+    static DEV_UTILS_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+    Ok(DEV_UTILS_PATH.get_or_init(|| {
+        let current_dir = std::env::current_dir().unwrap();
+        let mut dev_utils_path = current_dir.clone();
+
+        visit_dirs(&current_dir, &mut |entry| {
+            let is_dev_utils = entry.path().ends_with("raptor-rs/dev_utils");
+            if is_dev_utils {
+                dev_utils_path = entry.path();
+            }
+            is_dev_utils
+        }, &[".git".as_ref(), ".idea".as_ref()]).unwrap();
+
+        dev_utils_path
+    }).to_owned())
+}
+
+pub fn load_example_gtfs() -> Result<Gtfs, Error> {
+    let dev_utils_dir = find_dev_utils_folder()?;
+    let gtfs_dir = dev_utils_dir.join("gtfs/melbourne.zip");
+    GtfsReader::default().read_shapes(false).read_from_path(gtfs_dir.to_str().unwrap())
+}
+
+pub fn find_example_patronage_data() -> Result<File, io::Error> {
+    let dev_utils_dir = find_dev_utils_folder()?;
+    let data_path = dev_utils_dir.join("data/melbourne.parquet");
+    File::open(data_path)
 }
 
 pub fn get_example_date() -> NaiveDate {
