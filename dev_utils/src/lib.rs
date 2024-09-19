@@ -8,6 +8,15 @@ use std::fs::{DirEntry, File};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use rayon::{ThreadPool, ThreadPoolBuildError};
+
+// Create a rayon thread pool with the given number of threads.
+pub fn create_pool(num_threads: usize) -> Result<ThreadPool, ThreadPoolBuildError> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+}
+
 // Common example data for the examples and benchmarks.
 
 // Returns if any file in the directory tree matches the condition.
@@ -37,17 +46,17 @@ fn find_dev_utils_folder() -> Result<PathBuf, io::Error> {
 
     Ok(DEV_UTILS_PATH.get_or_init(|| {
         let current_dir = std::env::current_dir().unwrap();
-        let mut dev_utils_path = current_dir.clone();
+        let mut dev_utils_path = None;
 
-        visit_dirs(&current_dir, &mut |entry| {
+        visit_dirs(&current_dir.join("../"), &mut |entry| {
             let is_dev_utils = entry.path().ends_with("raptor-rs/dev_utils");
             if is_dev_utils {
-                dev_utils_path = entry.path();
+                dev_utils_path = Some(entry.path());
             }
             is_dev_utils
         }, &[".git".as_ref(), ".idea".as_ref()]).unwrap();
 
-        dev_utils_path
+        dev_utils_path.unwrap()
     }).to_owned())
 }
 

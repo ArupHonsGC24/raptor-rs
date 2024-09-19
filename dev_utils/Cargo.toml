@@ -9,5 +9,6 @@ path = "src/lib.rs"
 
 [dependencies]
 chrono = "0.4.38"
+rayon = "1.10.0"
 gtfs-structures =  { version = "0.41", default-features = false }
 raptor-rs = { path = ".." }

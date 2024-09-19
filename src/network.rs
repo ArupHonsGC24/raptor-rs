@@ -20,7 +20,7 @@ pub type PathfindingCost = f32;
 pub type CoordType = f32;
 
 // Used to globally identify a trip in the network.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Default, Clone, Copy, PartialEq)]
 pub struct GlobalTripIndex {
     pub route_idx: RouteIndex,
     pub trip_order: TripOrder,
