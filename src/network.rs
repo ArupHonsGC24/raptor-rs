@@ -514,6 +514,11 @@ impl Network {
         let route = &self.routes[route_idx];
         route.get_trip(trip_idx, &self.stop_times)
     }
+    
+    pub fn get_trip_id(&self, trip_idx: GlobalTripIndex) -> &str {
+        let route = &self.routes[trip_idx.route_idx as usize];
+        route.trip_ids[trip_idx.trip_order as usize].as_ref()
+    }
 
     pub fn print_stats(&self) {
         println!("Network has {} stops, {} routes, {} trips and {} connections.", self.stops.len(), self.routes.len(), self.num_trips, self.connections.len());

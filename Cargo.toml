@@ -15,16 +15,16 @@ name = "mcraptor"
 harness = false
 
 [dependencies]
-chrono = { version = "^0.4.37", default-features = false }
-bnum = { version = "^0.11.0", default-features = false }
-gtfs-structures =  { version = "^0.41", default-features = false }
-rgb = { version = "^0.8.37", default-features = false }
-# kdam = "^0.5.2"
-arrayvec = { version = "^0.7.6", default-features = false }
+chrono = { version = "0.4.37", default-features = false }
+bnum = { version = "0.11.0", default-features = false }
+gtfs-structures =  { version = "0.41", default-features = false }
+rgb = { version = "0.8.37", default-features = false }
+arrayvec = { version = "0.7.6", default-features = false }
+thiserror = "1.0.63"
 #bump-scope = "^0.5.7"
 #allocator-api2 = "^0.2.18"
 
 [dev-dependencies]
-fastrand = "^2.1.0"
-criterion = { version = "^0.5", features = ["html_reports"] }
+fastrand = "2.1.0"
+criterion = { version = "0.5", features = ["html_reports"] }
 dev_utils = { path = "./dev_utils" }

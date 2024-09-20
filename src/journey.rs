@@ -76,6 +76,16 @@ impl JourneyPreferences {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum JourneyError {
+    #[error("No journey found.")]
+    NoJourneyFound,
+    #[error("Infinite loop in journey reconstruction.")]
+    InfiniteLoop,
+}
+
+pub type JourneyResult<'a> = Result<Journey<'a>, JourneyError>;
+
 pub struct Journey<'a> {
     pub legs: Vec<Leg>,
     pub duration: Timestamp,
@@ -95,10 +105,10 @@ impl<'a> Journey<'a> {
         Self { legs, duration, network }
     }
 
-    pub(crate) fn from_tau(tau: &[TauEntry], network: &'a Network, start: usize, end: usize) -> Self {
+    pub(crate) fn from_tau(tau: &[TauEntry], network: &'a Network, start: usize, end: usize) -> JourneyResult<'a> {
         // No journey found.
         if tau[end].boarding.is_none() {
-            return Journey::empty(network);
+            return Err(JourneyError::NoJourneyFound);
         }
 
         // Reconstruct trip from parent pointers
@@ -112,8 +122,7 @@ impl<'a> Journey<'a> {
             }
             num_legs += 1;
             if num_legs > MAX_LEGS {
-                eprintln!("Infinite loop in journey reconstruction.");
-                return Journey::empty(network);
+                return Err(JourneyError::InfiniteLoop);
             }
             let current_tau = &tau[current_stop];
 
@@ -143,12 +152,19 @@ impl<'a> Journey<'a> {
 
         legs.reverse();
 
-        Journey::from(legs, network)
+        Ok(Journey::from(legs, network))
     }
 
-    pub(crate) fn from_tau_bag(tau: &[Bag], network: &'a Network, start: usize, end: usize, path_preferences: &JourneyPreferences) -> Self {
+    pub(crate) fn from_tau_bag(tau: &[Bag], network: &'a Network, start: usize, end: usize, path_preferences: &JourneyPreferences) -> JourneyResult<'a> {
+        // No journey found.
+        if tau[end].labels.is_empty() {
+            return Err(JourneyError::NoJourneyFound);
+        }
+        
         let mut legs = Vec::new();
         let mut current_stop_opt = Some(end);
+        const MAX_LEGS: usize = 100; // Prevent infinite loop (TODO: which is a bug).
+        let mut num_legs = 0;
         while let Some(current_stop) = current_stop_opt {
             if current_stop == start {
                 break;
@@ -177,10 +193,14 @@ impl<'a> Journey<'a> {
                 }
                 current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop as usize);
             }
+            num_legs += 1;
+            if num_legs > MAX_LEGS {
+                return Err(JourneyError::InfiniteLoop);
+            }
         }
 
         legs.reverse();
-        Journey::from(legs, network)
+        Ok(Journey::from(legs, network))
     }
 }
 

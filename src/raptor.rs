@@ -1,4 +1,4 @@
-use crate::journey::{Boarding, JourneyPreferences, TauEntry};
+use crate::journey::{Boarding, JourneyError, JourneyPreferences, TauEntry};
 use crate::multicriteria::{Bag, Label};
 use crate::network::{GlobalTripIndex, Network, PathfindingCost, Route, RouteIndex, StopIndex, Timestamp, TripOrder};
 use crate::utils::{self, OptionExt};
@@ -95,7 +95,7 @@ fn earliest_trip(network: &Network, route: &Route, stop_order: usize, time: Time
     found_trip_order
 }
 
-pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, end: StopIndex) -> Journey {
+pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, end: StopIndex) -> Result<Journey, JourneyError> {
     let start = start as usize;
     let end = end as usize;
     let num_stops = network.stops.len();
@@ -180,7 +180,16 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
     Journey::from_tau(&tau_star, network, start, end)
 }
 
-pub fn mc_raptor_query<'a>(network: &'a Network, start: StopIndex, start_time: Timestamp, end: StopIndex, costs: &[PathfindingCost], path_preferences: &JourneyPreferences) -> Journey<'a> {
+pub fn mc_raptor_query<'a>(network: &'a Network, 
+                           start: StopIndex, 
+                           start_time: Timestamp, 
+                           end: StopIndex, 
+                           costs: &[PathfindingCost], 
+                           path_preferences: &JourneyPreferences) -> Result<Journey<'a>, JourneyError> {
+    if start == end {
+        return Ok(Journey::empty(network));
+    }
+    
     let start = start as usize;
     let end = end as usize;
     let num_stops = network.stops.len();
