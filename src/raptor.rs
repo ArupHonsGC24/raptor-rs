@@ -1,4 +1,4 @@
-use crate::journey::{Boarding, JourneyError, JourneyPreferences, TauEntry};
+use crate::journey::{Boarding, JourneyError, JourneyPreferences, JourneyResult, TauEntry};
 use crate::multicriteria::{Bag, Label};
 use crate::network::{GlobalTripIndex, Network, PathfindingCost, Route, RouteIndex, StopIndex, Timestamp, TripOrder};
 use crate::utils::{self, OptionExt};
@@ -163,7 +163,7 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
                                 boarded_time: departure_time,
                                 trip: GlobalTripIndex {
                                     route_idx: route_idx as RouteIndex,
-                                    trip_order: found_trip_order as TripOrder
+                                    trip_order: found_trip_order as TripOrder,
                                 },
                             },
                         )
@@ -180,18 +180,23 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
     Journey::from_tau(&tau_star, network, start, end)
 }
 
-pub fn mc_raptor_query<'a>(network: &'a Network, 
-                           start: StopIndex, 
-                           start_time: Timestamp, 
-                           end: StopIndex, 
-                           costs: &[PathfindingCost], 
-                           path_preferences: &JourneyPreferences) -> Result<Journey<'a>, JourneyError> {
-    if start == end {
-        return Ok(Journey::empty(network));
-    }
+pub fn mc_raptor_query<'a>(network: &'a Network,
+                           start: StopIndex,
+                           start_time: Timestamp,
+                           ends: &[StopIndex],
+                           costs: &[PathfindingCost],
+                           path_preferences: &JourneyPreferences) -> Vec<JourneyResult<'a>> {
     
+    let end = if ends.len() == 1 {
+        if start == ends[0] {
+            return Vec::new();
+        }
+        Some(ends[0] as usize) 
+    } else { 
+        None 
+    };
+
     let start = start as usize;
-    let end = end as usize;
     let num_stops = network.stops.len();
 
     // τ[p][i] = earliest known arrival time at stop p with up to i trips.
@@ -241,7 +246,7 @@ pub fn mc_raptor_query<'a>(network: &'a Network,
                 // TODO: Only have boarding data in route bag.
                 let mut updated = false;
                 for label in &route_bag.labels {
-                    if !tau_star[stop_idx].dominates(label) && !tau_star[end].dominates(label) {
+                    if !tau_star[stop_idx].dominates(label) && OptionExt::is_none_or(end, |end| !tau_star[end].dominates(label)) {
                         updated |= tau[stop_idx][k].add(label.clone());
                         updated |= tau_star[stop_idx].add(label.clone());
                     }
@@ -281,7 +286,7 @@ pub fn mc_raptor_query<'a>(network: &'a Network,
                                     boarded_time: departure_time,
                                     trip: GlobalTripIndex {
                                         route_idx: route_idx as RouteIndex,
-                                        trip_order: found_trip_order as TripOrder
+                                        trip_order: found_trip_order as TripOrder,
                                     },
                                 },
                             ),
@@ -298,5 +303,5 @@ pub fn mc_raptor_query<'a>(network: &'a Network,
         }
     }
 
-    Journey::from_tau_bag(&tau_star, network, start, end, path_preferences)
+    ends.iter().map(|&end| Journey::from_tau_bag(&tau_star, network, start, end as usize, path_preferences)).collect::<Vec<_>>()
 }
