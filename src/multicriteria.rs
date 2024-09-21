@@ -20,14 +20,14 @@ impl Label {
 }
 
 #[derive(Clone)]
-pub struct Bag<const N: usize = 2> {
+pub struct Bag<const N: usize = 4> {
     // Labels are sorted by increasing arrival time.
     // Only non-dominated labels are stored, so labels end up also sorted in decreasing cost.
     // Labels are stored in a fixed-size array to avoid heap allocation. Worst arrival time labels are discarded.
     pub labels: ArrayVec<Label, N>,
 }
 
-impl Bag {
+impl<const N: usize> Bag<N> {
     pub(crate) const fn new() -> Self {
         Bag { labels: ArrayVec::new_const() }
     }

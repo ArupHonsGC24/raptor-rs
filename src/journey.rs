@@ -155,7 +155,7 @@ impl<'a> Journey<'a> {
         Ok(Journey::from(legs, network))
     }
 
-    pub(crate) fn from_tau_bag(tau: &[Bag], network: &'a Network, start: usize, end: usize, path_preferences: &JourneyPreferences) -> JourneyResult<'a> {
+    pub(crate) fn from_tau_bag<const N: usize>(tau: &[Bag<N>], network: &'a Network, start: usize, end: usize, path_preferences: &JourneyPreferences) -> JourneyResult<'a> {
         // No journey found.
         if tau[end].labels.is_empty() {
             return Err(JourneyError::NoJourneyFound);

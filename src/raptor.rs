@@ -180,13 +180,12 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
     Journey::from_tau(&tau_star, network, start, end)
 }
 
-pub fn mc_raptor_query<'a>(network: &'a Network,
+pub fn mc_raptor_query<'a, const N: usize>(network: &'a Network,
                            start: StopIndex,
                            start_time: Timestamp,
                            ends: &[StopIndex],
                            costs: &[PathfindingCost],
                            path_preferences: &JourneyPreferences) -> Vec<JourneyResult<'a>> {
-    
     let end = if ends.len() == 1 {
         if start == ends[0] {
             return Vec::new();
@@ -200,9 +199,9 @@ pub fn mc_raptor_query<'a>(network: &'a Network,
     let num_stops = network.stops.len();
 
     // τ[p][i] = earliest known arrival time at stop p with up to i trips.
-    let mut tau = vec![[const { Bag::new() }; K]; num_stops];
+    let mut tau = vec![[const { Bag::<N>::new() }; K]; num_stops];
     // τ*[p] = earliest known arrival time at stop p.
-    let mut tau_star = vec![Bag::new(); num_stops];
+    let mut tau_star = vec![Bag::<N>::new(); num_stops];
 
     // Set initial departure time from start station.
     let start_label = Label::new(start_time, 0.);
@@ -221,14 +220,14 @@ pub fn mc_raptor_query<'a>(network: &'a Network,
             let route = &network.routes[route_idx];
 
             // B_r
-            let mut route_bag = Bag::new();
+            let mut route_bag = Bag::<N>::new();
 
             // This keeps track of when and where we got on the current trip.
             for (stop_order, stop_idx) in route.iter_stops(earliest_stop_order, &network.route_stops)
             {
                 // Multicriteria step 1: Update arrival time of every label in Br according to each labels' trip.
                 {
-                    let mut new_bag = Bag::new();
+                    let mut new_bag = Bag::<N>::new();
                     for label in route_bag.labels.iter() {
                         let boarding = label.boarding.as_ref().unwrap();
                         assert_eq!(boarding.trip.route_idx, route_idx as RouteIndex);
@@ -303,5 +302,5 @@ pub fn mc_raptor_query<'a>(network: &'a Network,
         }
     }
 
-    ends.iter().map(|&end| Journey::from_tau_bag(&tau_star, network, start, end as usize, path_preferences)).collect::<Vec<_>>()
+    ends.iter().map(|&end| Journey::from_tau_bag::<N>(&tau_star, network, start, end as usize, path_preferences)).collect::<Vec<_>>()
 }
