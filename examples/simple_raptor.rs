@@ -8,7 +8,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let journey = raptor_query(&network, start, start_time, end);
 
-    println!("{journey}");
+    if let Ok(journey) = journey {
+        println!("{journey}");
+    } else {
+        println!("No journey found.");
+    }
 
     Ok(())
 }

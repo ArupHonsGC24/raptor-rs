@@ -83,14 +83,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut journey = Journey::empty(&network);
         let query_start = std::time::Instant::now();
         for _ in 0..num_iterations {
-            journey = raptor_query(&network, start, start_time, end);
+            journey = raptor_query(&network, start, start_time, end).unwrap();
         }
         println!("RAPTOR:");
         println!("Query took {:?}", query_start.elapsed() / num_iterations);
         println!("{journey}");
         let query_start = std::time::Instant::now();
         for _ in 0..num_iterations {
-            journey = csa_query(&network, start, start_time, end);
+            journey = csa_query(&network, start, start_time, end).unwrap();
         }
         println!("CSA:");
         println!("Query took {:?}", query_start.elapsed() / num_iterations);

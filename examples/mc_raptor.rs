@@ -11,10 +11,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Random pathfinding costs.
     fastrand::seed(7);
     let costs: Vec<_> = repeat_with(|| fastrand::f32() as PathfindingCost).take(network.stop_times.len()).collect();
-    let path_preferences = raptor::journey::JourneyPreferences::default();
-    let journey = mc_raptor_query(&network, start, start_time, end, &costs, &path_preferences).expect("Failed to find journey.");
+    let preferences = raptor::journey::JourneyPreferences::default();
+    let journey = mc_raptor_query::<5>(&network, start, start_time, &[end], &costs, &preferences);
 
-    println!("{journey}");
+    for journey in journey {
+        if let Ok(journey) = journey {
+            println!("{journey}");
+        } else {
+            println!("No journey found.");
+        }
+    }
 
     Ok(())
 }
