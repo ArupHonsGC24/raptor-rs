@@ -162,20 +162,20 @@ impl<'a> Journey<'a> {
 
     pub(crate) fn from_tau_bag<const N: usize>(tau: &[Bag<N>], network: &'a Network, start: usize, end: usize, path_preferences: &JourneyPreferences) -> JourneyResult<'a> {
         // No journey found.
-        if tau[end].labels.is_empty() {
+        if tau[end].is_empty() {
             return Err(JourneyError::NoJourneyFound);
         }
         
         let mut legs = Vec::new();
         let mut current_stop_opt = Some(end);
-        let journey_cost = path_preferences.best_label(&tau[end].labels).unwrap().cost;
+        let journey_cost = path_preferences.best_label(tau[end].as_slice()).unwrap().cost;
         const MAX_LEGS: usize = 100; // Prevent infinite loop (TODO: which is a bug).
         let mut num_legs = 0;
         while let Some(current_stop) = current_stop_opt {
             if current_stop == start {
                 break;
             }
-            if let Some(current_tau) = path_preferences.best_label(&tau[current_stop].labels) {
+            if let Some(current_tau) = path_preferences.best_label(tau[current_stop].as_slice()) {
                 if let Some(boarded_leg) = &current_tau.boarding {
                     // Find arrival stop order.
                     let route = &network.routes[boarded_leg.trip.route_idx as usize];

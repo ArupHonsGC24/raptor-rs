@@ -140,7 +140,7 @@ impl Route {
         let end = start + self.num_stops as usize;
         start..end
     }
-    pub fn get_index_in_trip(&self, trip_order: usize, stop_order: usize) -> usize {
+    pub fn get_stop_times_index(&self, trip_order: usize, stop_order: usize) -> usize {
         let trip_range = self.get_trip_range(trip_order);
         let index = trip_range.start + stop_order;
         debug_assert!(trip_range.contains(&index));

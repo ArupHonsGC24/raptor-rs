@@ -24,15 +24,15 @@ pub(crate) struct Bag<const N: usize = 4> {
     // Labels are sorted by increasing arrival time.
     // Only non-dominated labels are stored, so labels end up also sorted in decreasing cost.
     // Labels are stored in a fixed-size array to avoid heap allocation. Worst arrival time labels are discarded.
-    pub labels: ArrayVec<Label, N>,
+    labels: ArrayVec<Label, N>,
 }
 
 impl<const N: usize> Bag<N> {
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Bag { labels: ArrayVec::new_const() }
     }
 
-    pub(crate) fn dominates(&self, other_label: &Label) -> bool {
+    pub fn dominates(&self, other_label: &Label) -> bool {
         for label in &self.labels {
             if label.dominates(other_label) {
                 return true;
@@ -40,12 +40,30 @@ impl<const N: usize> Bag<N> {
         }
         false
     }
-}
 
-impl<const N: usize> Bag<N> {
+    pub fn is_empty(&self) -> bool {
+        self.labels.is_empty()
+    }
+
+    pub fn as_slice(&self) -> &[Label] {
+        self.labels.as_slice()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Label> {
+        self.labels.iter()
+    }
+
+    pub fn consume_iter(&mut self) -> impl Iterator<Item = Label> {
+        std::mem::take(&mut self.labels).into_iter()
+    }
+
+    pub fn set(&mut self, bag: Bag<N>) {
+        self.labels = bag.labels;
+    }
+
     // Adds a label to the bag, discarding non-dominated labels.
     // Returns true if the label was added <=> the bag was modified.
-    pub(crate) fn add(&mut self, new_label: Label) -> bool {
+    pub fn add(&mut self, new_label: Label) -> bool {
         if self.labels.is_empty() {
             self.labels.push(new_label);
             return true;
