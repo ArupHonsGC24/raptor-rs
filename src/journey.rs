@@ -1,5 +1,5 @@
 use crate::multicriteria::{Bag, Label};
-use crate::network::{GlobalTripIndex, PathfindingCost, StopIndex, Timestamp, TripOrder};
+use crate::network::{GlobalTripIndex, PathfindingCost, Route, StopIndex, Timestamp, TripOrder};
 use crate::{utils, Network};
 use std::fmt::Display;
 
@@ -89,20 +89,31 @@ pub type JourneyResult<'a> = Result<Journey<'a>, JourneyError>;
 pub struct Journey<'a> {
     pub legs: Vec<Leg>,
     pub duration: Timestamp,
+    pub cost: PathfindingCost,
     pub network: &'a Network,
 }
 
 impl<'a> Journey<'a> {
     pub fn empty(network: &'a Network) -> Self {
-        Self { legs: Vec::new(), duration: 0, network }
+        Self { legs: Vec::new(), duration: 0, cost: 0., network }
     }
 
-    fn from(legs: Vec<Leg>, network: &'a Network) -> Self {
+    fn from(legs: Vec<Leg>, cost: PathfindingCost, network: &'a Network) -> Self {
         let duration = match (legs.first(), legs.last()) {
             (Some(first), Some(last)) => last.arrival_time - first.boarded_time,
             _ => 0,
         };
-        Self { legs, duration, network }
+        Self { legs, duration, cost, network }
+    }
+
+    fn calculate_arrival_stop_order(route: &Route, network: &Network, boarded_leg: &Boarding, current_stop: usize) -> StopIndex {
+         route.get_stops(&network.route_stops).iter().enumerate().skip(boarded_leg.boarded_stop_order as usize).find_map(|(i, &stop)| {
+            if stop as usize == current_stop {
+                Some(i as StopIndex)
+            } else {
+                None
+            }
+        }).expect("Arrival stop not found in route.")
     }
 
     pub(crate) fn from_tau(tau: &[TauEntry], network: &'a Network, start: usize, end: usize) -> JourneyResult<'a> {
@@ -129,13 +140,7 @@ impl<'a> Journey<'a> {
             if let Some(boarded_leg) = &current_tau.boarding {
                 // Find arrival stop order.
                 let route = &network.routes[boarded_leg.trip.route_idx as usize];
-                let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().skip(boarded_leg.boarded_stop_order as usize).find_map(|(i, &stop)| {
-                    if stop as usize == current_stop {
-                        Some(i as StopIndex)
-                    } else {
-                        None
-                    }
-                }).expect("Arrival stop not found in route.");
+                let arrival_stop_order = Self::calculate_arrival_stop_order(route, network, boarded_leg, current_stop);
 
                 legs.push(Leg {
                     boarded_stop: boarded_leg.boarded_stop,
@@ -152,7 +157,7 @@ impl<'a> Journey<'a> {
 
         legs.reverse();
 
-        Ok(Journey::from(legs, network))
+        Ok(Journey::from(legs, 0., network))
     }
 
     pub(crate) fn from_tau_bag<const N: usize>(tau: &[Bag<N>], network: &'a Network, start: usize, end: usize, path_preferences: &JourneyPreferences) -> JourneyResult<'a> {
@@ -163,6 +168,7 @@ impl<'a> Journey<'a> {
         
         let mut legs = Vec::new();
         let mut current_stop_opt = Some(end);
+        let journey_cost = path_preferences.best_label(&tau[end].labels).unwrap().cost;
         const MAX_LEGS: usize = 100; // Prevent infinite loop (TODO: which is a bug).
         let mut num_legs = 0;
         while let Some(current_stop) = current_stop_opt {
@@ -173,13 +179,7 @@ impl<'a> Journey<'a> {
                 if let Some(boarded_leg) = &current_tau.boarding {
                     // Find arrival stop order.
                     let route = &network.routes[boarded_leg.trip.route_idx as usize];
-                    let arrival_stop_order = route.get_stops(&network.route_stops).iter().enumerate().skip(boarded_leg.boarded_stop_order as usize).find_map(|(i, &stop)| {
-                        if stop as usize == current_stop {
-                            Some(i as StopIndex)
-                        } else {
-                            None
-                        }
-                    }).expect("Arrival stop not found in route.");
+                    let arrival_stop_order = Self::calculate_arrival_stop_order(route, network, boarded_leg, current_stop);
 
                     legs.push(Leg {
                         boarded_stop: boarded_leg.boarded_stop,
@@ -200,7 +200,7 @@ impl<'a> Journey<'a> {
         }
 
         legs.reverse();
-        Ok(Journey::from(legs, network))
+        Ok(Journey::from(legs, journey_cost, network))
     }
 }
 

@@ -20,7 +20,7 @@ impl Label {
 }
 
 #[derive(Clone)]
-pub struct Bag<const N: usize = 4> {
+pub(crate) struct Bag<const N: usize = 4> {
     // Labels are sorted by increasing arrival time.
     // Only non-dominated labels are stored, so labels end up also sorted in decreasing cost.
     // Labels are stored in a fixed-size array to avoid heap allocation. Worst arrival time labels are discarded.
@@ -52,12 +52,12 @@ impl<const N: usize> Bag<N> {
         }
         // At least one label is present.
 
-        // Position of the first label with a larger arrival time than the new label.
+        // Position of the first label with a later arrival time than the new label.
         let partition = self.labels.iter().position(|label| new_label.arrival_time < label.arrival_time);
         let is_last_label = partition.is_none();
         let partition = partition.unwrap_or(self.labels.len());
 
-        // All the labels before the partition have a smaller arrival time than the new label, and may dominate it.
+        // All the labels before the partition have an earlier arrival time than the new label, and may dominate it.
         if self.labels[..partition].iter().any(|label| label.cost <= new_label.cost) {
             // The new label is dominated by at least one existing label.
             false
