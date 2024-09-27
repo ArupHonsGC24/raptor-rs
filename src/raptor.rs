@@ -181,11 +181,11 @@ pub fn raptor_query(network: &Network, start: StopIndex, start_time: Timestamp, 
 }
 
 pub fn mc_raptor_query<'a, const N: usize>(network: &'a Network,
-                           start: StopIndex,
-                           start_time: Timestamp,
-                           ends: &[StopIndex],
-                           costs: &[PathfindingCost],
-                           path_preferences: &JourneyPreferences) -> Vec<JourneyResult<'a>> {
+                                           start: StopIndex,
+                                           start_time: Timestamp,
+                                           ends: &[StopIndex],
+                                           costs: &[PathfindingCost],
+                                           path_preferences: &JourneyPreferences) -> Vec<JourneyResult<'a>> {
     let end = if ends.len() == 1 {
         if start == ends[0] {
             return Vec::new();
@@ -269,11 +269,11 @@ pub fn mc_raptor_query<'a, const N: usize>(network: &'a Network,
 
                     // Can we catch an earlier trip at this stop?
                     let current_tau = label.arrival_time.saturating_add(transfer_time);
-                    // TODO: Is there a way to use the existing boarding to optimise the earliest trip calculation? (Currently, the label sometimes has the wrong route.)
-                    // if let Some(boarding) = label.boarding.as_ref() {
-                    //     assert_eq!(boarding.route_idx, route_idx as RouteIndex);
-                    // }
-                    if let Some((found_trip_order, departure_time)) = earliest_trip(network, route, stop_order, current_tau, None/*label.boarding.as_ref()*/) {
+                    let boarding = None;
+                    // TODO: check this has the equivalent effect of the original code (boarding = none).
+                    //let boarding = label.boarding.as_ref().filter(|label_boarding| label_boarding.trip.route_idx == route_idx as RouteIndex);
+
+                    if let Some((found_trip_order, departure_time)) = earliest_trip(network, route, stop_order, current_tau, boarding) {
                         let new_label = Label {
                             arrival_time: label.arrival_time,
                             cost: label.cost,
