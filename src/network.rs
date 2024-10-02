@@ -269,10 +269,10 @@ impl Network {
                 continue;
             }
             if num_stops >= STOP_BITFIELD_SIZE_BITS {
-                eprintln!("Too many stops in route {route_id} ({}, max {}).", num_stops, STOP_BITFIELD_SIZE_BITS - 1);
+                log::error!("Too many stops in route {route_id} ({}, max {}).", num_stops, STOP_BITFIELD_SIZE_BITS - 1);
                 for (stop_idx, mapped_stop) in mapping.iter().enumerate() {
                     if mapped_stop.is_some() {
-                        eprintln!("Stop: {}", stops[stop_idx].name);
+                        log::error!("Stop: {}", stops[stop_idx].name);
                     }
                 }
                 assert!(false, "Too many stops in route {route_id} ({}, max {}).", num_stops, STOP_BITFIELD_SIZE_BITS - 1);
@@ -521,7 +521,7 @@ impl Network {
     }
 
     pub fn print_stats(&self) {
-        println!("Network has {} stops, {} routes, {} trips and {} connections.", self.stops.len(), self.routes.len(), self.num_trips, self.connections.len());
+        log::info!("Network has {} stops, {} routes, {} trips and {} connections.", self.stops.len(), self.routes.len(), self.num_trips, self.connections.len());
     }
 }
 

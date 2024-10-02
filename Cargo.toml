@@ -16,11 +16,12 @@ harness = false
 
 [dependencies]
 chrono = { version = "0.4.37", default-features = false }
-bnum = { version = "0.11.0", default-features = false }
+bnum = { version = "0.12.0", default-features = false }
 gtfs-structures =  { version = "0.41", default-features = false }
 rgb = { version = "0.8.37", default-features = false }
 arrayvec = { version = "0.7.6", default-features = false }
 thiserror = "1.0.63"
+log = "0.4.22"
 #bump-scope = "^0.5.7"
 #allocator-api2 = "^0.2.18"
 
