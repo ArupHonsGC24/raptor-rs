@@ -58,21 +58,22 @@ pub struct Leg {
 }
 
 // Journey preferences for a multi-criteria journey query.
+type JourneyUtilityFn = dyn Fn(&Label, Timestamp) -> PathfindingCost + Send + Sync;
 pub struct JourneyPreferences {
-    // Will choose the journey with the shortest travel time.
-    pub utility_function: fn(&Label) -> PathfindingCost,
+    // Function to determine the utility of a label, given a journey start time.
+    pub utility_function: Box<JourneyUtilityFn>,
 }
 
 impl Default for JourneyPreferences {
     fn default() -> Self {
         // By default, ignore cost and only consider travel time.
-        JourneyPreferences { utility_function: |label| label.arrival_time as PathfindingCost }
+        JourneyPreferences { utility_function: Box::new(|label, _| label.arrival_time as PathfindingCost) }
     }
 }
 
 impl JourneyPreferences {
-    pub(crate) fn best_label<'a>(&self, labels: &'a [Label]) -> Option<&'a Label> {
-        labels.iter().min_by(|a, b| f32::total_cmp(&(self.utility_function)(a), &(self.utility_function)(b)))
+    pub(crate) fn best_label<'a>(&self, labels: &'a [Label], start_time: Timestamp) -> Option<&'a Label> {
+        labels.iter().min_by(|a, b| f32::total_cmp(&(self.utility_function)(a, start_time), &(self.utility_function)(b, start_time)))
     }
 }
 
@@ -165,17 +166,20 @@ impl<'a> Journey<'a> {
         if tau[end].is_empty() {
             return Err(JourneyError::NoJourneyFound);
         }
-        
+
+        debug_assert!(tau[start].as_slice().len() == 1);
+        let start_time = tau[start].as_slice()[0].arrival_time;
+
         let mut legs = Vec::new();
         let mut current_stop_opt = Some(end);
-        let journey_cost = path_preferences.best_label(tau[end].as_slice()).unwrap().cost;
+        let journey_cost = path_preferences.best_label(tau[end].as_slice(), start_time).unwrap().cost;
         const MAX_LEGS: usize = 100; // Prevent infinite loop (TODO: which is a bug).
         let mut num_legs = 0;
         while let Some(current_stop) = current_stop_opt {
             if current_stop == start {
                 break;
             }
-            if let Some(current_tau) = path_preferences.best_label(tau[current_stop].as_slice()) {
+            if let Some(current_tau) = path_preferences.best_label(tau[current_stop].as_slice(), start_time) {
                 if let Some(boarded_leg) = &current_tau.boarding {
                     // Find arrival stop order.
                     let route = &network.routes[boarded_leg.trip.route_idx as usize];
