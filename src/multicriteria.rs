@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_bag_add() {
-        let mut bag = Bag::new();
+        let mut bag = Bag::<5>::new();
 
         // Should always add the first label.
         assert_eq!(bag.add(Label::new(5, 5.)), true);   // 1
