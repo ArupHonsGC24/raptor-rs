@@ -28,6 +28,7 @@ pub fn is_zero(buf: &[bool]) -> bool {
 }
 
 pub const fn get_size_bits<T>() -> usize {
+    // Is there anywhere where a byte isn't 8 bits?
     std::mem::size_of::<T>() * 8
 }
 

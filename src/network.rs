@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::journey::Connection;
+use crate::utils;
 use chrono::NaiveDate;
 use gtfs_structures::{DirectionType, Gtfs, Trip};
 use rgb::RGB8;
-use crate::journey::Connection;
-use crate::utils;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 // Timestamp is seconds since midnight.
 pub type Timestamp = u32;
 pub type StopIndex = u32;
-pub type StopBitfield = bnum::BUint<30>; // Maximum 64*7 = 448 stops per route. This is required for the 901 bus route in Melbourne?
+pub type StopBitfield = bnum::BUint<7>; // Maximum 64*7 = 448 stops per route. This is required for the 901 bus route in Melbourne?
 
 const STOP_BITFIELD_SIZE_BITS: usize = utils::get_size_bits::<StopBitfield>();
 
@@ -280,9 +280,17 @@ impl Network {
             }
 
             let mut route_map = HashMap::new();
+            let direction_bit = StopBitfield::ONE << (STOP_BITFIELD_SIZE_BITS - 1);
             for &trip in trips.iter() {
                 // Construct a big integer where the most significant bit is the direction of the trip, and the rest are stops.
-                let mut stop_field = StopBitfield::from(trip.direction_id.unwrap_or(DirectionType::Outbound) as u8) << STOP_BITFIELD_SIZE_BITS - 1;
+                let mut stop_field = match trip.direction_id.unwrap_or_else(|| {
+                    // TODO: Can the direction be calculated in the absence of a direction_id?
+                    log::warn!("Trip {} has no direction_id, assuming outbound.", trip.id);
+                    DirectionType::Outbound
+                }) {
+                    DirectionType::Inbound => direction_bit,
+                    DirectionType::Outbound => StopBitfield::ZERO,
+                };
                 for stop_time in trip.stop_times.iter() {
                     let stop_idx = stop_index[stop_time.stop.id.as_str()] as usize;
                     let route_relative_stop_idx = mapping[stop_idx].unwrap();
@@ -291,6 +299,38 @@ impl Network {
                 let route: &mut Vec<&Trip> = route_map.entry(stop_field).or_default();
                 route.push(trip);
             }
+
+            // Group routes into subsets.
+            fn is_subset(superset: StopBitfield, subset: StopBitfield) -> bool {
+                superset & subset == subset
+            }
+
+            // Sort fields by number of stops.
+            let mut stop_fields = route_map.keys().copied().collect::<Vec<_>>();
+            stop_fields.sort_unstable_by_key(|x| {
+                (x & !direction_bit).count_ones()
+            });
+            let mut subsets = HashMap::<StopBitfield, Vec<StopBitfield>>::new();
+            let mut supersets = HashMap::<StopBitfield, StopBitfield>::new();
+            'loop0: for &stop_field in stop_fields.iter() {
+                for (&possible_superset, subset_list) in subsets.iter_mut() {
+                    if is_subset(possible_superset, stop_field) {
+                        subset_list.push(possible_superset);
+                        supersets.insert(stop_field, possible_superset);
+                        break 'loop0;
+                    }
+                }
+
+                // Not in any subset, so it's a new set.
+                let mut subset = Vec::new();
+                for &other_stop_field in stop_fields.iter() {
+                    if is_subset(stop_field, other_stop_field) {
+                        subset.push(other_stop_field);
+                    }
+                }
+                subsets.insert(stop_field, subset);
+            }
+            // TODO: Compress subsets.
 
             num_routes += route_map.len();
             route_maps.push(route_map);
@@ -470,11 +510,6 @@ impl Network {
         // Sort connections by departure time.
         connections.sort_unstable_by_key(|x| x.departure_time);
 
-        // Subtract the transfer time from departure time after sorting.
-        //for connection in connections.iter_mut() {
-        //    connection.departure_time -= self.transfer_times[connection.departure_idx as usize];
-        //}
-
         self.connections = connections;
     }
 
@@ -514,7 +549,7 @@ impl Network {
         let route = &self.routes[route_idx];
         route.get_trip(trip_idx, &self.stop_times)
     }
-    
+
     pub fn get_trip_id(&self, trip_idx: GlobalTripIndex) -> &str {
         let route = &self.routes[trip_idx.route_idx as usize];
         route.trip_ids[trip_idx.trip_order as usize].as_ref()
