@@ -300,38 +300,6 @@ impl Network {
                 route.push(trip);
             }
 
-            // Group routes into subsets.
-            fn is_subset(superset: StopBitfield, subset: StopBitfield) -> bool {
-                superset & subset == subset
-            }
-
-            // Sort fields by number of stops.
-            let mut stop_fields = route_map.keys().copied().collect::<Vec<_>>();
-            stop_fields.sort_unstable_by_key(|x| {
-                (x & !direction_bit).count_ones()
-            });
-            let mut subsets = HashMap::<StopBitfield, Vec<StopBitfield>>::new();
-            let mut supersets = HashMap::<StopBitfield, StopBitfield>::new();
-            'loop0: for &stop_field in stop_fields.iter() {
-                for (&possible_superset, subset_list) in subsets.iter_mut() {
-                    if is_subset(possible_superset, stop_field) {
-                        subset_list.push(possible_superset);
-                        supersets.insert(stop_field, possible_superset);
-                        break 'loop0;
-                    }
-                }
-
-                // Not in any subset, so it's a new set.
-                let mut subset = Vec::new();
-                for &other_stop_field in stop_fields.iter() {
-                    if is_subset(stop_field, other_stop_field) {
-                        subset.push(other_stop_field);
-                    }
-                }
-                subsets.insert(stop_field, subset);
-            }
-            // TODO: Compress subsets.
-
             num_routes += route_map.len();
             route_maps.push(route_map);
         }
