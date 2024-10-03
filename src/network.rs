@@ -486,7 +486,7 @@ impl Network {
     pub fn get_stop_idx(&self, stop_id: &str) -> StopIndex { self.stop_index[stop_id] }
 
     pub fn stop_name_cmp(a: &str, b: &str) -> bool {
-        utils::get_short_stop_name(a).to_lowercase().replace(" ", "").contains(&b.to_lowercase().replace(" ", ""))
+        utils::get_short_stop_name(a).to_lowercase().replace(" ", "") == b.to_lowercase().replace(" ", "")
     }
 
     pub fn get_stop_idx_from_name(&self, stop_name: &str) -> Option<StopIndex> {
