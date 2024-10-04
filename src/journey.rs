@@ -101,7 +101,10 @@ impl<'a> Journey<'a> {
 
     fn from(legs: Vec<Leg>, cost: PathfindingCost, network: &'a Network) -> Self {
         let duration = match (legs.first(), legs.last()) {
-            (Some(first), Some(last)) => last.arrival_time - first.boarded_time,
+            (Some(first), Some(last)) => last.arrival_time.checked_sub(first.boarded_time).unwrap_or_else(|| {
+                log::warn!("Error: Journey duration underflow.");
+                0
+            }),
             _ => 0,
         };
         Self { legs, duration, cost, network }
