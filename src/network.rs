@@ -1,7 +1,7 @@
 use crate::journey::Connection;
 use crate::utils;
 use chrono::NaiveDate;
-use gtfs_structures::{DirectionType, Gtfs, Trip};
+use gtfs_structures::{DirectionType, Gtfs, RouteType, Trip};
 use rgb::RGB8;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -206,8 +206,8 @@ pub struct Network {
 }
 
 impl Network {
-    pub fn new(gtfs: &Gtfs, journey_date: NaiveDate, default_transfer_time: Timestamp) -> Self {
-        // GTFS optional fields that are unwrapped: stop.name, trip.direction_id, stop_time.arrival_time, stop_time.departure_time.
+    pub fn new(gtfs: &Gtfs, route_type: Option<RouteType>, journey_date: NaiveDate, default_transfer_time: Timestamp) -> Self {
+        // GTFS optional fields that are unwrapped: stop.name, stop_time.arrival_time, stop_time.departure_time.
 
         // We use one stop index as the direction of the trip when grouping as routes.
         assert!(
@@ -239,7 +239,7 @@ impl Network {
         let mut route_stop_indices = HashMap::<&str, RouteStopIndices>::new();
 
         for trip in gtfs.trips.values() {
-            if !utils::does_trip_run(&gtfs, &trip, journey_date) {
+            if !utils::does_trip_run(&gtfs, route_type, &trip, journey_date) {
                 continue;
             }
 

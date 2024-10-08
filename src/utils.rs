@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use gtfs_structures::{Gtfs, Trip};
+use gtfs_structures::{Gtfs, RouteType, Trip};
 
 use crate::network::Timestamp;
 
@@ -37,7 +37,12 @@ pub fn get_short_stop_name(stop: &str) -> &str {
     stop.split(" Railway Station").next().unwrap()
 }
 
-pub fn does_trip_run(gtfs: &Gtfs, trip: &Trip, date: NaiveDate) -> bool {
+pub fn does_trip_run(gtfs: &Gtfs, mode_filter: Option<RouteType>, trip: &Trip, date: NaiveDate) -> bool {
+    if let Some(mode_filter) = mode_filter {
+        if gtfs.routes.get(trip.route_id.as_str()).map(|route| route.route_type).unwrap() != mode_filter {
+            return false;
+        }
+    }
     if let Some(calender) = gtfs.calendar.get(trip.service_id.as_str()) {
         calender.valid_weekday(date) && calender.start_date <= date && date <= calender.end_date
     } else if let Some(calender_dates) = gtfs.calendar_dates.get(trip.service_id.as_str()) {
