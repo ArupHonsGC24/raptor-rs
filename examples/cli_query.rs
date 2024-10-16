@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     let default_transfer_time = 3 * 60;
-    let mut network = Network::new(&gtfs, journey_date, default_transfer_time);
+    let mut network = Network::new(&gtfs, None, journey_date, default_transfer_time);
     // Hardcode extra time at Flinders Street Station.
     //network.set_transfer_time_for_stop("19854", 4 * 60);
     network.build_connections();

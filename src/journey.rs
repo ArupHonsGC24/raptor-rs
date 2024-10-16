@@ -54,6 +54,8 @@ pub struct Leg {
     pub arrival_stop: StopIndex,
     pub arrival_stop_order: StopIndex,
     pub arrival_time: Timestamp,
+    // The time to transfer from this leg to the next one (None for the last leg).
+    pub transfer_time: Option<Timestamp>,
     pub trip: GlobalTripIndex,
 }
 
@@ -72,13 +74,18 @@ impl Default for JourneyPreferences {
 }
 
 impl JourneyPreferences {
-    pub(crate) fn best_label<'a>(&self, labels: &'a [Label], start_time: Timestamp) -> Option<&'a Label> {
-        labels.iter().min_by(|a, b| f32::total_cmp(&(self.utility_function)(a, start_time), &(self.utility_function)(b, start_time)))
+    // Finds the label that arrives before the next boarding time and with the best utility.
+    pub(crate) fn best_label<'a>(&self, next_boarding_time: Timestamp, labels: &'a [Label], start_time: Timestamp) -> Option<&'a Label> {
+        labels.iter()
+            .filter(|label| label.arrival_time < next_boarding_time)
+            .min_by(|a, b| f32::total_cmp(&(self.utility_function)(a, start_time), &(self.utility_function)(b, start_time)))
     }
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum JourneyError {
+    #[error("Journey not calculated for zero agents.")]
+    ZeroAgents,
     #[error("No journey found.")]
     NoJourneyFound,
     #[error("Infinite loop in journey reconstruction.")]
@@ -131,6 +138,7 @@ impl<'a> Journey<'a> {
         let mut current_stop_opt = Some(end);
         const MAX_LEGS: usize = 100; // Prevent infinite loop (TODO: which is a bug).
         let mut num_legs = 0;
+        let mut last_boarding: Option<&Boarding> = None;
         while let Some(current_stop) = current_stop_opt {
             if current_stop == start {
                 break;
@@ -153,8 +161,11 @@ impl<'a> Journey<'a> {
                     arrival_stop: current_stop as StopIndex,
                     arrival_stop_order,
                     arrival_time: current_tau.time,
+                    transfer_time: last_boarding.map(|last_boarding| last_boarding.boarded_time - current_tau.time),
                     trip: boarded_leg.trip,
                 });
+
+                last_boarding = Some(boarded_leg);
             }
             current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop as usize);
         }
@@ -175,14 +186,17 @@ impl<'a> Journey<'a> {
 
         let mut legs = Vec::new();
         let mut current_stop_opt = Some(end);
-        let journey_cost = path_preferences.best_label(tau[end].as_slice(), start_time).unwrap().cost;
+        let journey_cost = path_preferences.best_label(Timestamp::MAX, tau[end].as_slice(), start_time).unwrap().cost;
         const MAX_LEGS: usize = 100; // Prevent infinite loop (TODO: which is a bug).
         let mut num_legs = 0;
+        // Because we push legs in reverse, the previously iterated leg here is the next leg in the journey.
+        let mut next_boarding: Option<&Boarding> = None;
         while let Some(current_stop) = current_stop_opt {
             if current_stop == start {
                 break;
             }
-            if let Some(current_tau) = path_preferences.best_label(tau[current_stop].as_slice(), start_time) {
+            let next_boarding_time = next_boarding.map(|l| l.boarded_time).unwrap_or(Timestamp::MAX);
+            if let Some(current_tau) = path_preferences.best_label(next_boarding_time, tau[current_stop].as_slice(), start_time) {
                 if let Some(boarded_leg) = &current_tau.boarding {
                     // Find arrival stop order.
                     let route = &network.routes[boarded_leg.trip.route_idx as usize];
@@ -195,8 +209,10 @@ impl<'a> Journey<'a> {
                         arrival_stop: current_stop as StopIndex,
                         arrival_stop_order,
                         arrival_time: current_tau.arrival_time,
+                        transfer_time: next_boarding.map(|last_boarding| last_boarding.boarded_time - current_tau.arrival_time),
                         trip: boarded_leg.trip,
                     });
+                    next_boarding = Some(boarded_leg);
                 }
                 current_stop_opt = current_tau.boarding.as_ref().map(|leg| leg.boarded_stop as usize);
             }

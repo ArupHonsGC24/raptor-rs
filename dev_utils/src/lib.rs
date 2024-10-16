@@ -83,7 +83,7 @@ pub fn get_example_transfer_time() -> Timestamp {
 pub fn build_example_network(gtfs: &Gtfs) -> Network {
     let date = get_example_date();
     let transfer_time = get_example_transfer_time();
-    Network::new(&gtfs, date, transfer_time)
+    Network::new(&gtfs, None, date, transfer_time)
 }
 
 pub fn get_example_start_time() -> Timestamp {
